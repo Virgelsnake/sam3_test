@@ -182,7 +182,7 @@ Each task includes estimated time and dependencies.
 
 ### 2.7 Backend Testing
 
-- [ ] **T2.7.1** Write API integration tests
+- [x] **T2.7.1** Write API integration tests ✅ (20 tests passing)
 - [x] **T2.7.2** Test with Postman/curl ✅
   - Health endpoint: `GET /api/health` → `{"status": "ok"}`
   - All 6 endpoints verified via OpenAPI
