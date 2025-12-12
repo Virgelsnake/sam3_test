@@ -197,7 +197,7 @@ Each task includes estimated time and dependencies.
 
 ### 3.1 Worker Structure
 
-- [ ] **T3.1.1** Create worker directory structure:
+- [x] **T3.1.1** Create worker directory structure: ✅
   ```
   worker/
   ├── modal_app.py        # Modal deployment
@@ -210,7 +210,7 @@ Each task includes estimated time and dependencies.
 
 ### 3.2 Modal App Definition
 
-- [ ] **T3.2.1** Create `worker/modal_app.py`:
+- [x] **T3.2.1** Create `worker/modal_app.py`: ✅
   ```python
   import modal
   from sam3_service import SAM3Service
@@ -231,7 +231,7 @@ Each task includes estimated time and dependencies.
 
 ### 3.3 SAM 3 Service
 
-- [ ] **T3.3.1** Create `worker/sam3_service.py`:
+- [x] **T3.3.1** Create `worker/sam3_service.py`: ✅
   ```python
   class SAM3Service:
       def __init__(self)
@@ -244,7 +244,7 @@ Each task includes estimated time and dependencies.
 
 ### 3.4 Video Utilities
 
-- [ ] **T3.4.1** Create `worker/video_utils.py`:
+- [x] **T3.4.1** Create `worker/video_utils.py`: ✅
   - `download_video(url)` - Download from Supabase signed URL
   - `create_mask_video(masks, fps)` - Grayscale mask video
   - `create_composite_video(frames, masks, color, opacity)` - Overlay video
@@ -252,7 +252,7 @@ Each task includes estimated time and dependencies.
 
 ### 3.5 API Integration
 
-- [ ] **T3.5.1** Create webhook endpoint for Hostinger API to call Modal:
+- [x] **T3.5.1** Create Modal client service (`backend/app/services/modal_client.py`): ✅
   ```python
   # Option A: Direct HTTP call from FastAPI to Modal
   @app.post("/api/jobs")
@@ -262,7 +262,7 @@ Each task includes estimated time and dependencies.
       call = result.spawn(job_id, video_url, prompt)
   ```
 
-- [ ] **T3.5.2** Implement callback webhook for job completion:
+- [x] **T3.5.2** Implement callback webhook for job completion (`POST /api/jobs/{job_id}/complete`): ✅
   ```python
   # Modal calls back to Hostinger API when done
   @app.post("/api/jobs/{job_id}/complete")

@@ -1,0 +1,26 @@
+# SAM3 Worker Dependencies
+# Note: These are primarily for local development/testing.
+# Modal uses its own image definition in modal_app.py
+
+# Core ML
+torch>=2.0.0
+torchvision>=0.15.0
+
+# SAM 3
+sam3 @ git+https://github.com/facebookresearch/sam3.git
+
+# Video processing
+opencv-python-headless>=4.8.0
+decord>=0.6.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Supabase client
+supabase>=2.0.0
+
+# HTTP requests
+httpx>=0.25.0
+
+# Utilities
+einops>=0.7.0
+scipy>=1.11.0

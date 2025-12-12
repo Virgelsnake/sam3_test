@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     modal_token_id: Optional[str] = None
     modal_token_secret: Optional[str] = None
 
+    # API (for callbacks)
+    api_base_url: str = "http://localhost:8000"
+
     # Storage
     upload_bucket: str = "uploads"
     output_bucket: str = "outputs"

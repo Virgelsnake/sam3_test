@@ -16,6 +16,9 @@ redis>=5.0.0
 # HTTP client
 httpx>=0.26.0
 
+# Modal (GPU worker client)
+modal>=0.64.0
+
 # Utilities
 python-dotenv>=1.0.0
 
