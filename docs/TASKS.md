@@ -19,11 +19,11 @@ Each task includes estimated time and dependencies.
 
 ### 0.2 External Services Setup
 
-- [ ] **T0.2.1** Create Supabase project
-  - Create database
-  - Set up storage buckets: `uploads`, `outputs`
-  - Configure CORS for storage
-  - Get API keys (anon + service role)
+- [x] **T0.2.1** Create Supabase project ✅
+  - Project: `sam3-video-segmentation` (efesebfkgooupcnuyeoq)
+  - URL: https://efesebfkgooupcnuyeoq.supabase.co
+  - Storage buckets: `uploads` (private), `outputs` (public)
+  - Jobs table created with migration
 
 - [ ] **T0.2.2** Set up Hostinger VPS
   - Provision VPS with GPU (if available) or CPU instance
@@ -183,8 +183,11 @@ Each task includes estimated time and dependencies.
 ### 2.7 Backend Testing
 
 - [ ] **T2.7.1** Write API integration tests
-- [ ] **T2.7.2** Test with Postman/curl
-- [ ] **T2.7.3** Generate OpenAPI documentation
+- [x] **T2.7.2** Test with Postman/curl ✅
+  - Health endpoint: `GET /api/health` → `{"status": "ok"}`
+  - All 6 endpoints verified via OpenAPI
+- [x] **T2.7.3** Generate OpenAPI documentation ✅
+  - Available at: http://localhost:8000/docs
 
 ---
 
