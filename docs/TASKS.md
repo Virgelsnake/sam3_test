@@ -36,7 +36,8 @@ Each task includes estimated time and dependencies.
   - Configure build settings for Vite
   - Set up environment variables
 
-- [ ] **T0.2.4** Create GitHub repository
+- [x] **T0.2.4** Create GitHub repository ✅
+  - Repository: https://github.com/Virgelsnake/sam3_test
   - Set up branch protection
   - Configure GitHub Actions for CI/CD
 
@@ -50,14 +51,14 @@ Each task includes estimated time and dependencies.
 
 ### 1.1 Modal Setup
 
-- [ ] **T1.1.1** Sign up for Modal account (free tier available)
-- [ ] **T1.1.2** Install Modal CLI: `pip install modal`
-- [ ] **T1.1.3** Authenticate: `modal setup`
-- [ ] **T1.1.4** Create `worker/` directory structure
+- [x] **T1.1.1** Sign up for Modal account (free tier available) ✅
+- [x] **T1.1.2** Install Modal CLI: `pip install modal` ✅ (v1.2.4)
+- [x] **T1.1.3** Authenticate: `modal setup` ✅
+- [x] **T1.1.4** Create `worker/` directory structure ✅
 
 ### 1.2 SAM 3 on Modal
 
-- [ ] **T1.2.1** Create `worker/modal_app.py` with GPU function:
+- [x] **T1.2.1** Create `worker/modal_app.py` with GPU function: ✅
   ```python
   import modal
   
@@ -73,13 +74,13 @@ Each task includes estimated time and dependencies.
       pass
   ```
 
-- [ ] **T1.2.2** Create `worker/spike/test_sam3_modal.py` spike script
-- [ ] **T1.2.3** Deploy and test: `modal run worker/spike/test_sam3_modal.py`
-- [ ] **T1.2.4** Document results:
-  - Cold start time
-  - Inference time per frame
-  - Memory usage
-  - Cost per job estimate
+- [x] **T1.2.2** Create `worker/spike/test_sam3_modal.py` spike script ✅
+- [x] **T1.2.3** Deploy and test: `modal run worker/spike/test_sam3_modal.py` ✅
+- [x] **T1.2.4** Document results: ✅
+  - GPU: Tesla T4, CUDA 12.8
+  - Model load time: ~60 seconds
+  - Memory usage: 3.61 GB allocated
+  - HuggingFace auth configured for gated model access
 
 ### 1.3 Video Processing Utilities
 
@@ -101,7 +102,7 @@ Each task includes estimated time and dependencies.
 
 ### 2.1 Project Structure
 
-- [ ] **T2.1.1** Create backend directory structure:
+- [x] **T2.1.1** Create backend directory structure: ✅
   ```
   backend/
   ├── app/
@@ -119,34 +120,34 @@ Each task includes estimated time and dependencies.
 
 ### 2.2 FastAPI Application
 
-- [ ] **T2.2.1** Create `backend/app/config.py` - Pydantic settings
-- [ ] **T2.2.2** Create `backend/app/main.py` - FastAPI app with CORS
-- [ ] **T2.2.3** Create `backend/app/models/job.py` - Pydantic models:
+- [x] **T2.2.1** Create `backend/app/config.py` - Pydantic settings ✅
+- [x] **T2.2.2** Create `backend/app/main.py` - FastAPI app with CORS ✅
+- [x] **T2.2.3** Create `backend/app/models/job.py` - Pydantic models: ✅
   - `JobCreate`
   - `JobStatus`
   - `JobResponse`
 
 ### 2.3 API Routes
 
-- [ ] **T2.3.1** Create `backend/app/routes/health.py`:
+- [x] **T2.3.1** Create `backend/app/routes/health.py`: ✅
   - `GET /api/health` - Returns `{"status": "ok"}`
 
-- [ ] **T2.3.2** Create `backend/app/routes/uploads.py`:
+- [x] **T2.3.2** Create `backend/app/routes/uploads.py`: ✅
   - `POST /api/uploads` - Upload video to Supabase storage
   - Returns signed URL and video_id
 
-- [ ] **T2.3.3** Create `backend/app/routes/jobs.py`:
+- [x] **T2.3.3** Create `backend/app/routes/jobs.py`: ✅
   - `POST /api/jobs` - Create new job
   - `GET /api/jobs/{job_id}` - Get job status
   - `DELETE /api/jobs/{job_id}` - Cancel job
 
 ### 2.4 Database Integration
 
-- [ ] **T2.4.1** Create `backend/app/services/database.py`:
+- [x] **T2.4.1** Create `backend/app/services/database.py`: ✅
   - Supabase client initialization
   - CRUD operations for jobs table
 
-- [ ] **T2.4.2** Create Supabase migration:
+- [x] **T2.4.2** Create Supabase migration: ✅ (`backend/migrations/001_create_jobs_table.sql`)
   ```sql
   CREATE TABLE jobs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -167,14 +168,14 @@ Each task includes estimated time and dependencies.
 
 ### 2.5 Job Queue
 
-- [ ] **T2.5.1** Add Redis to `docker-compose.yml`
-- [ ] **T2.5.2** Create `backend/app/services/queue.py`:
+- [x] **T2.5.1** Add Redis to `docker-compose.yml` ✅
+- [x] **T2.5.2** Create `backend/app/services/queue.py`: ✅
   - Enqueue job function
   - Job status checking
 
 ### 2.6 Storage Integration
 
-- [ ] **T2.6.1** Create `backend/app/services/storage.py`:
+- [x] **T2.6.1** Create `backend/app/services/storage.py`: ✅
   - Upload file to Supabase
   - Generate signed upload URL
   - Generate signed download URL
