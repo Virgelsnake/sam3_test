@@ -210,7 +210,7 @@ def create_composite_video(
     opacity: float = 0.5,
     individual_masks: dict[int, dict[int, np.ndarray]] = None,
     tracked_objects: dict = None,
-) -> str:
+) -> tuple[str, dict[str, str]]:
     """
     Create a composite video with mask overlay on original frames.
 
@@ -225,7 +225,7 @@ def create_composite_video(
         tracked_objects: Optional tracking data for color assignment by category.
 
     Returns:
-        str: Path to the created video.
+        tuple: (path to created video, dict mapping category to hex color)
     """
     if not frames:
         raise ValueError("No frames provided")
@@ -274,16 +274,26 @@ def create_composite_video(
         (0, 255, 128),  # Spring green
     ]
     
-    # Build object ID to color mapping
+    # Build object ID to color mapping and category color mapping for UI
     obj_colors = {}
+    category_colors_hex = {}  # category -> hex color for frontend
+    
+    def bgr_to_hex(bgr: tuple) -> str:
+        """Convert BGR tuple to hex color string."""
+        b, g, r = bgr
+        return f"#{r:02X}{g:02X}{b:02X}"
+    
     if tracked_objects:
         for obj_id, obj_data in tracked_objects.items():
             category = obj_data.get("category", "").lower()
             if category in CATEGORY_COLORS:
                 obj_colors[int(obj_id)] = CATEGORY_COLORS[category]
+                category_colors_hex[category] = bgr_to_hex(CATEGORY_COLORS[category])
             else:
                 # Use fallback color based on object ID
-                obj_colors[int(obj_id)] = FALLBACK_COLORS[int(obj_id) % len(FALLBACK_COLORS)]
+                fallback_color = FALLBACK_COLORS[int(obj_id) % len(FALLBACK_COLORS)]
+                obj_colors[int(obj_id)] = fallback_color
+                category_colors_hex[category] = bgr_to_hex(fallback_color)
 
     for frame_idx, frame in enumerate(frames):
         # Convert RGB to BGR for OpenCV
@@ -352,7 +362,7 @@ def create_composite_video(
     # Convert to H.264 for browser compatibility
     output_path = convert_to_h264(output_path)
     
-    return output_path
+    return output_path, category_colors_hex
 
 
 def upload_to_supabase(

@@ -11,6 +11,7 @@ export interface Job {
   frame_count?: number;
   objects_detected?: number;
   inventory?: Record<string, number>;  // Item name -> count
+  inventory_colors?: Record<string, string>;  // Item name -> hex color
   error_message?: string;
   created_at: string;
   started_at?: string;

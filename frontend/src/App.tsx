@@ -149,7 +149,10 @@ function AppContent() {
               />
               
               {job.inventory && Object.keys(job.inventory).length > 0 && (
-                <InventoryList inventory={job.inventory} />
+                <InventoryList 
+                  inventory={job.inventory} 
+                  inventoryColors={job.inventory_colors}
+                />
               )}
               
               <DownloadButtons

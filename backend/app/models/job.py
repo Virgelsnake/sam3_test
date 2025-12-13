@@ -81,6 +81,7 @@ class JobResponse(BaseModel):
     frame_count: Optional[int] = None
     objects_detected: Optional[int] = None
     inventory: Optional[dict] = None  # Item inventory from classification
+    inventory_colors: Optional[dict] = None  # Hex colors for each category
     error_message: Optional[str] = None
 
     # Timestamps

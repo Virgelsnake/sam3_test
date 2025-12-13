@@ -1,0 +1,83 @@
+[
+  {
+    "gpu_type": "A10G",
+    "gpu_name": "NVIDIA A10",
+    "video_info": {
+      "frame_count": 199,
+      "fps": 30.0,
+      "duration_seconds": 6.633333333333334
+    },
+    "objects_detected": 52,
+    "timings": {
+      "download_seconds": 1.78,
+      "frame_extraction_seconds": 1.48,
+      "model_init_seconds": 34.96,
+      "segmentation_seconds": 943.97,
+      "total_seconds": 982.23,
+      "gpu_time_seconds": 978.93
+    },
+    "cost": {
+      "hourly_rate_usd": 0.6,
+      "job_cost_usd": 0.1632,
+      "cost_per_frame_usd": 0.00082
+    },
+    "performance": {
+      "frames_per_second": 0.21,
+      "seconds_per_frame": 4.744
+    }
+  },
+  {
+    "gpu_type": "A100-40GB",
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "video_info": {
+      "frame_count": 199,
+      "fps": 30.0,
+      "duration_seconds": 6.633333333333334
+    },
+    "objects_detected": 47,
+    "timings": {
+      "download_seconds": 0.52,
+      "frame_extraction_seconds": 1.07,
+      "model_init_seconds": 33.17,
+      "segmentation_seconds": 414.84,
+      "total_seconds": 449.62,
+      "gpu_time_seconds": 448.01
+    },
+    "cost": {
+      "hourly_rate_usd": 2.78,
+      "job_cost_usd": 0.346,
+      "cost_per_frame_usd": 0.001739
+    },
+    "performance": {
+      "frames_per_second": 0.48,
+      "seconds_per_frame": 2.085
+    }
+  },
+  {
+    "gpu_type": "A100-80GB",
+    "gpu_name": "NVIDIA A100 80GB PCIe",
+    "video_info": {
+      "frame_count": 199,
+      "fps": 30.0,
+      "duration_seconds": 6.633333333333334
+    },
+    "objects_detected": 54,
+    "timings": {
+      "download_seconds": 0.42,
+      "frame_extraction_seconds": 0.85,
+      "model_init_seconds": 24.31,
+      "segmentation_seconds": 476.59,
+      "total_seconds": 502.2,
+      "gpu_time_seconds": 500.9
+    },
+    "cost": {
+      "hourly_rate_usd": 3.22,
+      "job_cost_usd": 0.448,
+      "cost_per_frame_usd": 0.002251
+    },
+    "performance": {
+      "frames_per_second": 0.42,
+      "seconds_per_frame": 2.395
+    }
+  }
+]

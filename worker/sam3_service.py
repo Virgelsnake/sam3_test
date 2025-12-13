@@ -212,25 +212,29 @@ class SAM3Service:
         })
 
         # Step 3: Periodic re-scanning for new objects
+        print(f"[SAM3] === ENTERING RE-SCAN PHASE ===")
+        print(f"[SAM3] Total tracked objects so far: {len(self.tracked_objects)}")
+        print(f"[SAM3] Known categories: {self.known_categories}")
         rescan_frames = list(range(RESCAN_INTERVAL, len(frames), RESCAN_INTERVAL))
         if rescan_frames:
             print(f"[SAM3] Will re-scan at frames: {rescan_frames}")
+        else:
+            print(f"[SAM3] No re-scan frames (video has {len(frames)} frames, interval={RESCAN_INTERVAL})")
         
         for rescan_idx, rescan_frame in enumerate(rescan_frames):
             if progress_callback:
                 progress_callback(60 + int((rescan_idx / len(rescan_frames)) * 25), 
-                                f"Re-scanning frame {rescan_frame} for new objects...")
+                                f"Re-scanning frame {rescan_frame} for new instances...")
             
-            # Use GPT-4V to identify objects in this frame
-            new_categories = self._scan_for_new_categories(
-                video_path, prompt, frames[rescan_frame], rescan_frame
-            )
+            # Check for NEW INSTANCES of existing categories (not just new categories)
+            new_instances = self._scan_for_new_instances(video_path, rescan_frame)
             
-            if new_categories:
-                print(f"[SAM3] Frame {rescan_frame}: Found {len(new_categories)} NEW categories: {list(new_categories.keys())}")
+            if new_instances:
+                print(f"[SAM3] Frame {rescan_frame}: Found new instances: {new_instances}")
                 
-                # Run propagation for new categories (starting from this frame)
-                for category, obj_count in new_categories.items():
+                # Run propagation for categories with new instances (starting from this frame)
+                for category, new_count in new_instances.items():
+                    print(f"[SAM3] Propagating {new_count} new '{category}' instance(s) from frame {rescan_frame}")
                     category_result = self._propagate_single_category(
                         video_path, category, 0, None, 0, 1, start_frame=rescan_frame
                     )
@@ -241,10 +245,10 @@ class SAM3Service:
                                 all_individual_masks[frame_idx] = {}
                             all_individual_masks[frame_idx].update(obj_masks)
                 
-                # Add inventory snapshot for new objects
+                # Add inventory snapshot for new instances
                 inventory_snapshots.append({
                     "frame_index": rescan_frame,
-                    "reason": f"New objects detected: {list(new_categories.keys())}",
+                    "reason": f"New instances detected: {new_instances}",
                     "objects": {obj_id: obj.category_prompt for obj_id, obj in self.tracked_objects.items()},
                     "object_count": len(self.tracked_objects),
                 })
@@ -277,69 +281,70 @@ class SAM3Service:
             },
         }
 
-    def _scan_for_new_categories(self, video_path: str, user_prompt: str, frame: np.ndarray, frame_idx: int) -> dict:
+    def _scan_for_new_instances(self, video_path: str, frame_idx: int) -> dict:
         """
-        Re-scan a frame for NEW objects not already being tracked.
+        Re-scan a frame for NEW INSTANCES of existing categories.
+        
+        This compares the current detection count against tracked counts
+        to find objects that entered the scene after the initial frame.
         
         Args:
             video_path: Path to video file.
-            user_prompt: User's prompt.
-            frame: Frame to scan.
-            frame_idx: Frame index.
+            frame_idx: Frame index to scan.
             
         Returns:
-            dict: NEW categories found (not in self.known_categories).
+            dict: Categories with new instances {category: new_count}
         """
-        # Use GPT-4V to identify objects
+        print(f"[SAM3 RESCAN] Starting instance re-detection at frame {frame_idx}")
+        
+        # Count current tracked objects per category
+        tracked_counts = {}
+        for obj in self.tracked_objects.values():
+            cat = obj.category_prompt
+            tracked_counts[cat] = tracked_counts.get(cat, 0) + 1
+        
+        print(f"[SAM3 RESCAN] Current tracked counts: {tracked_counts}")
+        
+        new_instances = {}
+        session_id = self._create_session(video_path)
+        
         try:
-            self.classifier.initialize()
-            gpt4v_categories = self.classifier.identify_objects_in_frame(
-                frame, 
-                context=user_prompt if user_prompt else "inventory scan"
-            )
-        except Exception as e:
-            print(f"[SAM3] GPT-4V re-scan failed at frame {frame_idx}: {e}")
-            return {}
-        
-        # Filter to only NEW categories
-        new_categories = {}
-        for cat in gpt4v_categories:
-            cat_normalized = cat.lower().strip()
-            # Check if this is truly new (not a variant of existing)
-            is_new = True
-            for known in self.known_categories:
-                if cat_normalized in known or known in cat_normalized:
-                    is_new = False
-                    break
-            
-            if is_new and cat_normalized not in self.known_categories:
-                # Verify with SAM3 that objects exist
-                session_id = self._create_session(video_path)
-                try:
-                    response = self.predictor.handle_request({
-                        "type": "add_prompt",
-                        "session_id": session_id,
-                        "frame_index": frame_idx,
-                        "text": cat_normalized
-                    })
-                    outputs = response.get("outputs", {})
-                    obj_ids = outputs.get("out_obj_ids", [])
-                    if isinstance(obj_ids, np.ndarray):
-                        obj_ids = obj_ids.tolist()
+            for category, tracked_count in tracked_counts.items():
+                # Re-detect this category on the current frame
+                response = self.predictor.handle_request({
+                    "type": "add_prompt",
+                    "session_id": session_id,
+                    "frame_index": frame_idx,
+                    "text": category
+                })
+                
+                outputs = response.get("outputs", {})
+                obj_ids = outputs.get("out_obj_ids", [])
+                if isinstance(obj_ids, np.ndarray):
+                    obj_ids = obj_ids.tolist()
+                
+                # Count valid masks
+                current_count = 0
+                if obj_ids:
+                    binary_masks = outputs.get("out_binary_masks")
+                    if binary_masks is not None:
+                        if hasattr(binary_masks, 'cpu'):
+                            binary_masks = binary_masks.cpu().numpy()
+                        current_count = sum(1 for m in binary_masks if m.sum() > 0)
+                
+                print(f"[SAM3 RESCAN] '{category}': tracked={tracked_count}, detected={current_count}")
+                
+                # Check if we found MORE instances than we're tracking
+                if current_count > tracked_count:
+                    new_count = current_count - tracked_count
+                    new_instances[category] = new_count
+                    print(f"[SAM3 RESCAN] >>> Found {new_count} NEW '{category}' instance(s)!")
                     
-                    if obj_ids:
-                        binary_masks = outputs.get("out_binary_masks")
-                        if binary_masks is not None:
-                            if hasattr(binary_masks, 'cpu'):
-                                binary_masks = binary_masks.cpu().numpy()
-                            valid_count = sum(1 for m in binary_masks if m.sum() > 0)
-                            if valid_count > 0:
-                                new_categories[cat_normalized] = valid_count
-                                self.known_categories.add(cat_normalized)
-                finally:
-                    self._close_session(session_id)
+        finally:
+            self._close_session(session_id)
         
-        return new_categories
+        print(f"[SAM3 RESCAN] Result: {sum(new_instances.values()) if new_instances else 0} new instances across {len(new_instances)} categories")
+        return new_instances
 
     def _scan_for_categories(self, video_path: str, user_prompt: str, frame: np.ndarray = None) -> dict:
         """

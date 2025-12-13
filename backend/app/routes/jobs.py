@@ -170,6 +170,7 @@ async def get_job(job_id: UUID) -> JobResponse:
                     frame_count=job.frame_count,
                     objects_detected=job.objects_detected,
                     inventory=job.inventory,
+                    inventory_colors=job.inventory_colors,
                     error_message=job.error_message,
                     created_at=job.created_at,
                     started_at=job.started_at,

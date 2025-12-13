@@ -10,9 +10,17 @@ Test with: modal run worker/modal_app.py
 
 import os
 import tempfile
+import time
 from typing import Optional
 
 import modal
+
+# Modal GPU pricing (as of Dec 2024) - $/hour
+GPU_PRICING = {
+    "A10G": 0.60,        # 24GB VRAM
+    "A100-40GB": 2.78,   # 40GB VRAM (A100 PCIe)
+    "A100-80GB": 3.22,   # 80GB VRAM (A100 SXM)
+}
 
 # Modal app definition
 app = modal.App("sam3-video-segmentation")
@@ -69,9 +77,9 @@ supabase_secret = modal.Secret.from_name("supabase-secret")
 openai_secret = modal.Secret.from_name("openai-secret")
 
 @app.function(
-    gpu="A100-80GB",  # Need 80GB - SAM3 memory grows with frames processed
+    gpu="A10G",  # 24GB VRAM - sufficient for most videos
     image=sam3_image,
-    timeout=900,  # Increased timeout for longer videos
+    timeout=1800,  # 30 minute timeout
     secrets=[hf_secret, supabase_secret, openai_secret],
     retries=1,
 )
@@ -210,7 +218,7 @@ def process_video_job(
         print(f"[Job {job_id}] Creating composite video...")
         composite_video_path = tempfile.mktemp(suffix="_composite.mp4")
         temp_files.append(composite_video_path)
-        create_composite_video(
+        composite_video_path, category_colors = create_composite_video(
             frames,
             masks,
             composite_video_path,
@@ -247,6 +255,7 @@ def process_video_job(
             "frame_count": frame_count,
             "objects_detected": objects_detected,
             "inventory": inventory,
+            "inventory_colors": category_colors,  # Hex colors for each category
             "inventory_snapshots": inventory_snapshots,
             "tracked_objects": tracked_objects,
         }
@@ -265,6 +274,7 @@ def process_video_job(
                 "frame_count": frame_count,
                 "objects_detected": objects_detected,
                 "inventory": inventory,
+                "inventory_colors": category_colors,
                 "completed_at": datetime.utcnow().isoformat(),
             }
             supabase_client.table("jobs").update(update_data).eq("id", job_id).execute()
@@ -306,7 +316,127 @@ def process_video_job(
         cleanup_temp_files(*temp_files)
 
 
-@app.function(gpu="A100-80GB", image=sam3_image, timeout=120, secrets=[hf_secret])
+# =============================================================================
+# GPU BENCHMARK FUNCTIONS
+# =============================================================================
+# These functions run the same processing on different GPU types for cost analysis
+
+def _run_benchmark(gpu_type: str, video_url: str, prompt: str) -> dict:
+    """
+    Internal benchmark runner - measures processing time and calculates cost.
+    
+    Returns timing data and cost analysis for the given GPU type.
+    """
+    import torch
+    
+    from sam3_service import SAM3Service
+    from video_utils import download_video, extract_frames, get_video_info, cleanup_temp_files
+    
+    start_time = time.time()
+    temp_files = []
+    
+    # Track individual phase timings
+    timings = {}
+    
+    # Phase 1: Download
+    phase_start = time.time()
+    video_path = download_video(video_url)
+    temp_files.append(video_path)
+    timings["download"] = time.time() - phase_start
+    
+    # Get video info
+    video_info = get_video_info(video_path)
+    
+    # Phase 2: Extract frames
+    phase_start = time.time()
+    frames = extract_frames(video_path)
+    timings["frame_extraction"] = time.time() - phase_start
+    
+    # Phase 3: Initialize SAM3
+    phase_start = time.time()
+    sam3 = SAM3Service()
+    sam3.initialize()
+    timings["model_init"] = time.time() - phase_start
+    
+    # Phase 4: Run segmentation (the main GPU-intensive work)
+    phase_start = time.time()
+    result = sam3.process_video(video_path, prompt, lambda p, m: None)
+    timings["segmentation"] = time.time() - phase_start
+    
+    # Cleanup
+    cleanup_temp_files(*temp_files)
+    
+    # Calculate totals
+    total_time = time.time() - start_time
+    gpu_time = timings["model_init"] + timings["segmentation"]  # GPU-bound time
+    
+    # Cost calculation
+    hourly_rate = GPU_PRICING.get(gpu_type, 0)
+    cost = (gpu_time / 3600) * hourly_rate
+    
+    return {
+        "gpu_type": gpu_type,
+        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "video_info": {
+            "frame_count": video_info["frame_count"],
+            "fps": video_info["fps"],
+            "duration_seconds": video_info["frame_count"] / video_info["fps"],
+        },
+        "objects_detected": result["objects_detected"],
+        "timings": {
+            "download_seconds": round(timings["download"], 2),
+            "frame_extraction_seconds": round(timings["frame_extraction"], 2),
+            "model_init_seconds": round(timings["model_init"], 2),
+            "segmentation_seconds": round(timings["segmentation"], 2),
+            "total_seconds": round(total_time, 2),
+            "gpu_time_seconds": round(gpu_time, 2),
+        },
+        "cost": {
+            "hourly_rate_usd": hourly_rate,
+            "job_cost_usd": round(cost, 4),
+            "cost_per_frame_usd": round(cost / video_info["frame_count"], 6),
+        },
+        "performance": {
+            "frames_per_second": round(video_info["frame_count"] / timings["segmentation"], 2),
+            "seconds_per_frame": round(timings["segmentation"] / video_info["frame_count"], 3),
+        },
+    }
+
+
+@app.function(
+    gpu="A10G",
+    image=sam3_image,
+    timeout=1800,
+    secrets=[hf_secret, supabase_secret, openai_secret],
+)
+def benchmark_a10g(video_url: str, prompt: str = "Generate an inventory of detected items") -> dict:
+    """Benchmark on A10G GPU (24GB VRAM) - $0.60/hour"""
+    return _run_benchmark("A10G", video_url, prompt)
+
+
+@app.function(
+    gpu="A100-40GB",
+    image=sam3_image,
+    timeout=1800,
+    secrets=[hf_secret, supabase_secret, openai_secret],
+)
+def benchmark_a100_40gb(video_url: str, prompt: str = "Generate an inventory of detected items") -> dict:
+    """Benchmark on A100-40GB GPU - $2.78/hour"""
+    return _run_benchmark("A100-40GB", video_url, prompt)
+
+
+@app.function(
+    gpu="A100-80GB",
+    image=sam3_image,
+    timeout=1800,
+    secrets=[hf_secret, supabase_secret, openai_secret],
+)
+def benchmark_a100_80gb(video_url: str, prompt: str = "Generate an inventory of detected items") -> dict:
+    """Benchmark on A100-80GB GPU - $3.22/hour"""
+    return _run_benchmark("A100-80GB", video_url, prompt)
+
+
+@app.function(gpu="A10G", image=sam3_image, timeout=120, secrets=[hf_secret])
 def health_check() -> dict:
     """
     Health check function to verify the worker is operational.
@@ -327,8 +457,9 @@ def health_check() -> dict:
 @app.local_entrypoint()
 def main(
     video_url: str = "",
-    prompt: str = "person",
+    prompt: str = "Generate an inventory of detected items",
     job_id: str = "test-job",
+    benchmark: bool = False,
 ):
     """
     Local entrypoint for testing the worker.
@@ -337,23 +468,110 @@ def main(
         video_url: URL to a test video.
         prompt: Text prompt for segmentation.
         job_id: Test job ID.
+        benchmark: If True, run GPU cost/performance benchmark on all 3 GPU types.
     """
+    import json
+    
     print("=" * 60)
     print("SAM3 Video Segmentation Worker")
     print("=" * 60)
 
-    # Run health check first
-    print("\n📋 Running health check...")
-    health = health_check.remote()
-    print(f"Health: {health}")
-
     if not video_url:
-        print("\n⚠️  No video URL provided. Use --video-url to test processing.")
-        print("Example:")
-        print("  modal run worker/modal_app.py --video-url 'https://...' --prompt 'person'")
+        print("\n⚠️  No video URL provided.")
+        print("\nUsage:")
+        print("  # Normal processing:")
+        print("  modal run worker/modal_app.py --video-url 'https://...' --prompt 'inventory'")
+        print("\n  # GPU Benchmark (compares A10G, A100-40GB, A100-80GB):")
+        print("  modal run worker/modal_app.py --video-url 'https://...' --benchmark")
         return
 
-    # Process the video
-    print(f"\n📋 Processing video with prompt: '{prompt}'")
-    result = process_video_job.remote(job_id, video_url, prompt)
-    print(f"\nResult: {result}")
+    if benchmark:
+        print("\n" + "=" * 60)
+        print("GPU COST/PERFORMANCE BENCHMARK")
+        print("=" * 60)
+        print(f"\nVideo URL: {video_url}")
+        print(f"Prompt: {prompt}")
+        print("\nRunning benchmarks on all 3 GPU types...")
+        print("This will take some time as each GPU processes the full video.\n")
+        
+        results = []
+        
+        # Run benchmarks sequentially (can't run same video in parallel due to download)
+        print("\n[1/3] Benchmarking A10G (24GB, $0.60/hr)...")
+        try:
+            r1 = benchmark_a10g.remote(video_url, prompt)
+            results.append(r1)
+            print(f"      ✓ Completed in {r1['timings']['total_seconds']}s, cost: ${r1['cost']['job_cost_usd']:.4f}")
+        except Exception as e:
+            print(f"      ✗ Failed: {e}")
+            results.append({"gpu_type": "A10G", "error": str(e)})
+        
+        print("\n[2/3] Benchmarking A100-40GB (40GB, $2.78/hr)...")
+        try:
+            r2 = benchmark_a100_40gb.remote(video_url, prompt)
+            results.append(r2)
+            print(f"      ✓ Completed in {r2['timings']['total_seconds']}s, cost: ${r2['cost']['job_cost_usd']:.4f}")
+        except Exception as e:
+            print(f"      ✗ Failed: {e}")
+            results.append({"gpu_type": "A100-40GB", "error": str(e)})
+        
+        print("\n[3/3] Benchmarking A100-80GB (80GB, $3.22/hr)...")
+        try:
+            r3 = benchmark_a100_80gb.remote(video_url, prompt)
+            results.append(r3)
+            print(f"      ✓ Completed in {r3['timings']['total_seconds']}s, cost: ${r3['cost']['job_cost_usd']:.4f}")
+        except Exception as e:
+            print(f"      ✗ Failed: {e}")
+            results.append({"gpu_type": "A100-80GB", "error": str(e)})
+        
+        # Print comparison table
+        print("\n" + "=" * 60)
+        print("BENCHMARK RESULTS")
+        print("=" * 60)
+        
+        valid_results = [r for r in results if "error" not in r]
+        
+        if valid_results:
+            print(f"\n{'GPU Type':<15} {'Time (s)':<12} {'Cost ($)':<12} {'FPS':<10} {'$/Frame':<12}")
+            print("-" * 60)
+            
+            for r in valid_results:
+                print(f"{r['gpu_type']:<15} "
+                      f"{r['timings']['gpu_time_seconds']:<12.1f} "
+                      f"${r['cost']['job_cost_usd']:<11.4f} "
+                      f"{r['performance']['frames_per_second']:<10.2f} "
+                      f"${r['cost']['cost_per_frame_usd']:<11.6f}")
+            
+            # Find the winner
+            cheapest = min(valid_results, key=lambda x: x['cost']['job_cost_usd'])
+            fastest = min(valid_results, key=lambda x: x['timings']['gpu_time_seconds'])
+            
+            print("\n" + "-" * 60)
+            print(f"💰 CHEAPEST: {cheapest['gpu_type']} at ${cheapest['cost']['job_cost_usd']:.4f}/job")
+            print(f"⚡ FASTEST:  {fastest['gpu_type']} at {fastest['timings']['gpu_time_seconds']:.1f}s")
+            
+            if cheapest['gpu_type'] == fastest['gpu_type']:
+                print(f"\n🏆 RECOMMENDATION: {cheapest['gpu_type']} is both cheapest AND fastest!")
+            else:
+                # Calculate value ratio
+                time_ratio = cheapest['timings']['gpu_time_seconds'] / fastest['timings']['gpu_time_seconds']
+                cost_ratio = fastest['cost']['job_cost_usd'] / cheapest['cost']['job_cost_usd']
+                print(f"\n📊 ANALYSIS:")
+                print(f"   {fastest['gpu_type']} is {time_ratio:.1f}x faster")
+                print(f"   {cheapest['gpu_type']} is {cost_ratio:.1f}x cheaper")
+                print(f"\n🏆 RECOMMENDATION: {cheapest['gpu_type']} (best value for cost-conscious workloads)")
+        
+        # Save full results to file
+        print("\n\nFull results saved to: benchmark_results.json")
+        with open("benchmark_results.json", "w") as f:
+            json.dump(results, f, indent=2)
+        
+    else:
+        # Normal processing mode
+        print("\n📋 Running health check...")
+        health = health_check.remote()
+        print(f"Health: {health}")
+
+        print(f"\n📋 Processing video with prompt: '{prompt}'")
+        result = process_video_job.remote(job_id, video_url, prompt)
+        print(f"\nResult: {result}")
