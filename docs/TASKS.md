@@ -282,12 +282,12 @@ Each task includes estimated time and dependencies.
 
 ### 4.1 Project Setup
 
-- [ ] **T4.1.1** Create Vite + React + TypeScript project:
+- [x] **T4.1.1** Create Vite + React + TypeScript project: ✅
   ```bash
   pnpm create vite frontend --template react-ts
   ```
 
-- [ ] **T4.1.2** Install dependencies:
+- [x] **T4.1.2** Install dependencies: ✅
   ```bash
   pnpm add tailwindcss postcss autoprefixer
   pnpm add @tanstack/react-query axios
@@ -295,7 +295,7 @@ Each task includes estimated time and dependencies.
   pnpm add class-variance-authority clsx tailwind-merge
   ```
 
-- [ ] **T4.1.3** Set up shadcn/ui:
+- [x] **T4.1.3** Set up Tailwind CSS v4 + custom UI components: ✅
   ```bash
   pnpm dlx shadcn@latest init
   pnpm dlx shadcn@latest add button card input progress
@@ -303,7 +303,7 @@ Each task includes estimated time and dependencies.
 
 ### 4.2 Component Structure
 
-- [ ] **T4.2.1** Create directory structure:
+- [x] **T4.2.1** Create directory structure: ✅
   ```
   frontend/src/
   ├── components/
@@ -325,48 +325,48 @@ Each task includes estimated time and dependencies.
 
 ### 4.3 Core Components
 
-- [ ] **T4.3.1** Create `VideoUpload.tsx`:
+- [x] **T4.3.1** Create `VideoUpload.tsx`: ✅
   - Drag-and-drop zone
   - File type validation (MP4, WEBM)
   - Size validation (<100MB)
   - Duration validation (<30s)
   - First frame thumbnail preview
 
-- [ ] **T4.3.2** Create `PromptInput.tsx`:
+- [x] **T4.3.2** Create `PromptInput.tsx`: ✅
   - Text input field
   - Example prompts dropdown
   - Character limit indicator
 
-- [ ] **T4.3.3** Create `JobStatus.tsx`:
+- [x] **T4.3.3** Create `JobStatus.tsx`: ✅
   - Status badge (pending/processing/completed/error)
   - Progress bar
   - Error message display
 
-- [ ] **T4.3.4** Create `VideoPlayer.tsx`:
+- [x] **T4.3.4** Create `VideoPlayer.tsx`: ✅
   - Split view (original | result)
   - Playback controls
   - Toggle between mask and composite view
 
-- [ ] **T4.3.5** Create `DownloadButtons.tsx`:
+- [x] **T4.3.5** Create `DownloadButtons.tsx`: ✅
   - Download mask video button
   - Download composite video button
   - File size indicators
 
 ### 4.4 API Integration
 
-- [ ] **T4.4.1** Create `services/api.ts`:
+- [x] **T4.4.1** Create `services/api.ts`: ✅
   ```typescript
   export const uploadVideo = async (file: File) => Promise<UploadResponse>
   export const createJob = async (videoId: string, prompt: string) => Promise<Job>
   export const getJob = async (jobId: string) => Promise<Job>
   ```
 
-- [ ] **T4.4.2** Create `hooks/useUpload.ts` with React Query mutation
-- [ ] **T4.4.3** Create `hooks/useJob.ts` with polling for status
+- [x] **T4.4.2** Create `hooks/useUpload.ts` with React Query mutation ✅
+- [x] **T4.4.3** Create `hooks/useJob.ts` with polling for status ✅
 
 ### 4.5 Main App
 
-- [ ] **T4.5.1** Create `App.tsx` with full user flow:
+- [x] **T4.5.1** Create `App.tsx` with full user flow: ✅
   1. Upload state
   2. Prompt state
   3. Processing state
@@ -374,10 +374,10 @@ Each task includes estimated time and dependencies.
 
 ### 4.6 Styling & UX
 
-- [ ] **T4.6.1** Implement responsive design
-- [ ] **T4.6.2** Add loading animations
-- [ ] **T4.6.3** Add error states with retry options
-- [ ] **T4.6.4** Add success animations
+- [x] **T4.6.1** Implement responsive design ✅
+- [x] **T4.6.2** Add loading animations ✅
+- [x] **T4.6.3** Add error states with retry options ✅
+- [x] **T4.6.4** Add success animations ✅
 
 ---
 
