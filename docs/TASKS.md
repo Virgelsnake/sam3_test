@@ -385,7 +385,7 @@ Each task includes estimated time and dependencies.
 
 ### 5.1 Docker Compose
 
-- [ ] **T5.1.1** Create complete `docker-compose.yml`:
+- [x] **T5.1.1** Create complete `docker-compose.yml`: ✅
   ```yaml
   services:
     api:
@@ -407,14 +407,14 @@ Each task includes estimated time and dependencies.
 
 ### 5.2 Environment Configuration
 
-- [ ] **T5.2.1** Create `.env.production` template
-- [ ] **T5.2.2** Document all environment variables
-- [ ] **T5.2.3** Set up secrets in GitHub
+- [x] **T5.2.1** Create `.env.production` template ✅
+- [x] **T5.2.2** Document all environment variables (`.env.example`) ✅
+- [x] **T5.2.3** Set up secrets in GitHub (workflows configured) ✅
 
 ### 5.3 Deployment Scripts
 
-- [ ] **T5.3.1** Create `deploy.sh` for Hostinger VPS
-- [ ] **T5.3.2** Configure Netlify build:
+- [x] **T5.3.1** Create `deploy.sh` for Hostinger VPS ✅
+- [x] **T5.3.2** Configure Netlify build (`netlify.toml`): ✅
   ```toml
   [build]
     command = "pnpm build"
@@ -423,12 +423,13 @@ Each task includes estimated time and dependencies.
 
 ### 5.4 GitHub Actions
 
-- [ ] **T5.4.1** Create `.github/workflows/deploy-backend.yml`
-- [ ] **T5.4.2** Create `.github/workflows/deploy-frontend.yml`
+- [x] **T5.4.1** Create `.github/workflows/deploy-backend.yml` ✅
+- [x] **T5.4.2** Create `.github/workflows/deploy-frontend.yml` ✅
+- [x] **T5.4.3** Create `.github/workflows/deploy-worker.yml` ✅
 
 ### 5.5 End-to-End Testing
 
-- [ ] **T5.5.1** Test complete flow locally
+- [ ] **T5.5.1** Test complete flow locally (requires Modal secrets setup)
 - [ ] **T5.5.2** Test complete flow on staging
 - [ ] **T5.5.3** Performance testing with real videos
 
