@@ -41,6 +41,84 @@ class ClassificationService:
         self.client = OpenAI(api_key=api_key)
         self._initialized = True
 
+    def identify_objects_in_frame(
+        self,
+        frame: np.ndarray,
+        context: str = "inventory scan",
+    ) -> list[str]:
+        """
+        Use GPT-4V to identify ALL objects visible in a raw frame (no masks).
+        
+        This is the open-vocabulary identification step that runs BEFORE SAM3 detection.
+        Returns a list of object labels that can be used as prompts for SAM3.
+
+        Args:
+            frame: Original video frame (RGB numpy array).
+            context: Context hint for identification.
+
+        Returns:
+            list[str]: List of identified object labels suitable for SAM3 prompts.
+        """
+        if not self._initialized:
+            self.initialize()
+
+        # Encode frame to base64
+        image_b64 = self._encode_image(frame)
+
+        prompt = f"""Analyze this image and identify ALL distinct physical objects visible.
+
+Context: {context}
+
+Instructions:
+1. List every distinct physical object you can see (furniture, electronics, items on surfaces, etc.)
+2. Use simple, specific labels (e.g., "office chair", "computer monitor", "keyboard", "coffee mug")
+3. Include count if multiple of same item (e.g., if 3 monitors, list "monitor" once)
+4. Focus on objects that could be segmented/highlighted - not background elements like walls/floor
+5. Be thorough - don't miss smaller items like mice, phones, cups, plants
+
+Respond in this exact JSON format:
+{{
+    "objects": ["object1", "object2", "object3"],
+    "scene_description": "Brief description of the scene"
+}}
+
+List objects as simple noun phrases suitable for object detection."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_b64}",
+                                    "detail": "high"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=500,
+                response_format={"type": "json_object"}
+            )
+
+            result_text = response.choices[0].message.content
+            import json
+            result = json.loads(result_text)
+            
+            objects = result.get("objects", [])
+            print(f"[Classification] GPT-4V identified {len(objects)} object types: {objects}")
+            
+            return objects
+
+        except Exception as e:
+            print(f"[Classification] Error in open-vocabulary identification: {e}")
+            return []
+
     def classify_frame_objects(
         self,
         frame: np.ndarray,
