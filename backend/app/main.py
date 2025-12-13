@@ -1,13 +1,22 @@
 """FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .middleware import error_handler_middleware, RateLimiter
 from .routes import health_router, jobs_router, uploads_router
 from .services.queue import queue_service
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -38,6 +47,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add error handling middleware
+    error_handler_middleware(app)
+
+    # Add rate limiting (60 requests/minute, 1000 requests/hour)
+    app.add_middleware(RateLimiter, requests_per_minute=60, requests_per_hour=1000)
+
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
 
     # Register routers
     app.include_router(health_router)
