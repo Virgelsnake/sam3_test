@@ -57,17 +57,18 @@ sam3_image = (
         # Install SAM 3 from GitHub
         "sam3 @ git+https://github.com/facebookresearch/sam3.git"
     )
+    .add_local_file("sam3_service.py", "/root/sam3_service.py")
+    .add_local_file("video_utils.py", "/root/video_utils.py")
 )
 
 # Secrets for HuggingFace and Supabase
 hf_secret = modal.Secret.from_name("huggingface-secret")
 supabase_secret = modal.Secret.from_name("supabase-secret")
 
-
 @app.function(
-    gpu="T4",
+    gpu="A100-80GB",  # Need 80GB - SAM3 memory grows with frames processed
     image=sam3_image,
-    timeout=600,
+    timeout=900,  # Increased timeout for longer videos
     secrets=[hf_secret, supabase_secret],
     retries=1,
 )
@@ -241,7 +242,7 @@ def process_video_job(
         cleanup_temp_files(*temp_files)
 
 
-@app.function(gpu="T4", image=sam3_image, timeout=120, secrets=[hf_secret])
+@app.function(gpu="A100-80GB", image=sam3_image, timeout=120, secrets=[hf_secret])
 def health_check() -> dict:
     """
     Health check function to verify the worker is operational.

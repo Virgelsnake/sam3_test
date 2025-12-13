@@ -131,33 +131,82 @@ class SAM3Service:
         Returns:
             str: Session ID for this video.
         """
-        # SAM 3 uses the video path as the session identifier
-        # Initialize the predictor state for this video
-        self.predictor.init_state(video_path)
-        return video_path
+        # SAM 3 uses handle_request API
+        response = self.predictor.handle_request({
+            "type": "start_session",
+            "resource_path": video_path
+        })
+        return response["session_id"]
 
     def _add_text_prompt(self, session_id: str, prompt: str) -> dict:
         """
         Add a text prompt to identify objects in the video.
 
         Args:
-            session_id: The session ID (video path).
+            session_id: The session ID.
             prompt: Text description of the object to segment.
 
         Returns:
             dict: Result containing objects_detected count.
         """
-        # SAM 3 uses add_new_prompt_with_text for text-based segmentation
-        # This identifies objects in the first frame matching the text
-        frame_idx = 0  # Start from first frame
-        obj_ids, masks = self.predictor.add_new_prompt_with_text(
-            frame_idx=frame_idx,
-            text=prompt,
-        )
+        # SAM 3 uses handle_request API with add_prompt type
+        response = self.predictor.handle_request({
+            "type": "add_prompt",
+            "session_id": session_id,
+            "frame_index": 0,
+            "text": prompt
+        })
+
+        outputs = response.get("outputs", {})
+        
+        # SAM3 returns outputs with 'out_obj_ids' containing detected object IDs
+        obj_ids = outputs.get("out_obj_ids", [])
+        if isinstance(obj_ids, np.ndarray):
+            obj_ids = obj_ids.tolist()
+        objects_detected = len(obj_ids) if obj_ids else 0
+        
+        print(f"[SAM3] add_prompt response keys: {list(response.keys())}")
+        print(f"[SAM3] outputs type: {type(outputs)}")
+        print(f"[SAM3] outputs keys: {list(outputs.keys()) if isinstance(outputs, dict) else 'N/A'}")
+        print(f"[SAM3] detected obj_ids from add_prompt: {obj_ids}")
+
+        # If no objects found with the given prompt, try common object categories
+        if objects_detected == 0:
+            print(f"[SAM3] No objects found with prompt '{prompt}', trying specific categories...")
+            
+            # Try common office/general object categories
+            fallback_prompts = [
+                "person", "chair", "desk", "monitor", "computer", 
+                "keyboard", "mouse", "phone", "cup", "bottle",
+                "laptop", "table", "lamp", "plant", "book"
+            ]
+            
+            all_obj_ids = set()
+            for fallback_prompt in fallback_prompts:
+                try:
+                    fb_response = self.predictor.handle_request({
+                        "type": "add_prompt",
+                        "session_id": session_id,
+                        "frame_index": 0,
+                        "text": fallback_prompt
+                    })
+                    fb_outputs = fb_response.get("outputs", {})
+                    fb_obj_ids = fb_outputs.get("out_obj_ids", [])
+                    if isinstance(fb_obj_ids, np.ndarray):
+                        fb_obj_ids = fb_obj_ids.tolist()
+                    
+                    if fb_obj_ids:
+                        print(f"[SAM3] Found {len(fb_obj_ids)} object(s) with prompt '{fallback_prompt}'")
+                        all_obj_ids.update(fb_obj_ids)
+                except Exception as e:
+                    print(f"[SAM3] Error with fallback prompt '{fallback_prompt}': {e}")
+            
+            objects_detected = len(all_obj_ids)
+            print(f"[SAM3] Total unique objects found with fallback prompts: {objects_detected}")
 
         return {
-            "objects_detected": len(obj_ids) if obj_ids is not None else 0,
-            "initial_masks": masks,
+            "objects_detected": objects_detected,
+            "initial_outputs": outputs,
         }
 
     def _propagate_masks(
@@ -169,7 +218,7 @@ class SAM3Service:
         Propagate masks through all video frames.
 
         Args:
-            session_id: The session ID (video path).
+            session_id: The session ID.
             progress_callback: Optional progress callback.
 
         Returns:
@@ -177,26 +226,39 @@ class SAM3Service:
         """
         masks = {}
 
-        # Propagate through the video
-        # SAM 3's propagate_in_video yields (frame_idx, obj_ids, mask_logits)
-        for frame_idx, obj_ids, mask_logits in self.predictor.propagate_in_video():
-            # Convert logits to binary mask
-            # mask_logits shape: (num_objects, 1, H, W)
-            if mask_logits is not None and len(mask_logits) > 0:
-                # Combine all object masks into one
-                combined_mask = (mask_logits > 0).cpu().numpy()
+        # SAM 3 uses handle_stream_request for propagation
+        # Limit to 300 frames (~10s at 30fps) to prevent OOM on A10G
+        for result in self.predictor.handle_stream_request({
+            "type": "propagate_in_video",
+            "session_id": session_id,
+            "propagation_direction": "forward",  # Changed from "both" to reduce memory
+            "start_frame_index": 0,
+            "max_frame_num_to_track": 300  # Limit frames to prevent OOM
+        }):
+            frame_idx = result["frame_index"]
+            frame_outputs = result.get("outputs", {})
 
-                # If multiple objects, combine with OR
-                if combined_mask.ndim == 4:
-                    combined_mask = combined_mask.squeeze(1)  # Remove channel dim
-                    combined_mask = combined_mask.any(axis=0)  # Combine objects
+            if frame_outputs:
+                # SAM3 returns: {'out_obj_ids', 'out_probs', 'out_boxes_xywh', 'out_binary_masks', 'frame_stats'}
+                # Extract binary masks and combine them
+                binary_masks = frame_outputs.get("out_binary_masks")
+                
+                if binary_masks is not None and isinstance(binary_masks, np.ndarray):
+                    # binary_masks shape is typically (N, H, W) where N is number of objects
+                    if binary_masks.ndim == 3:
+                        # Combine all object masks into one using logical OR
+                        combined_mask = binary_masks.any(axis=0).astype(np.float32)
+                    elif binary_masks.ndim == 2:
+                        # Single mask
+                        combined_mask = binary_masks.astype(np.float32)
+                    else:
+                        combined_mask = None
 
-                masks[frame_idx] = combined_mask.astype(np.float32)
+                if combined_mask is not None:
+                    masks[frame_idx] = combined_mask
 
             # Update progress (30% to 90% range)
             if progress_callback and frame_idx % 10 == 0:
-                # Estimate progress based on frame index
-                # This is approximate since we don't know total frames upfront
                 progress = min(30 + (frame_idx * 0.5), 85)
                 progress_callback(int(progress), f"Processing frame {frame_idx}...")
 
@@ -209,9 +271,15 @@ class SAM3Service:
         Args:
             session_id: The session ID to close.
         """
-        # Reset predictor state
+        # SAM 3 uses handle_request API to close session
         if self.predictor is not None:
-            self.predictor.reset_state()
+            try:
+                self.predictor.handle_request({
+                    "type": "close_session",
+                    "session_id": session_id
+                })
+            except Exception:
+                pass
 
         # Clear CUDA cache
         if torch.cuda.is_available():

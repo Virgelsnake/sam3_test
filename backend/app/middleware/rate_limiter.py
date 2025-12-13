@@ -1,5 +1,6 @@
 """Rate limiting middleware using Redis."""
 
+import logging
 import time
 from typing import Optional
 
@@ -7,6 +8,8 @@ from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..services.queue import queue_service
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter(BaseHTTPMiddleware):
@@ -51,7 +54,7 @@ class RateLimiter(BaseHTTPMiddleware):
         Returns:
             tuple: (is_allowed, remaining, reset_time)
         """
-        redis = queue_service._redis
+        redis = queue_service._client
         if redis is None:
             # If Redis is not available, allow the request
             return True, limit, 0
@@ -96,6 +99,10 @@ class RateLimiter(BaseHTTPMiddleware):
         )
 
         if not allowed:
+            logger.warning(
+                f"DIAGNOSTIC: Minute rate limit EXCEEDED for {client_ip} on {request.url.path}. "
+                f"Raising HTTPException(429)"
+            )
             raise HTTPException(
                 status_code=429,
                 detail="Rate limit exceeded. Please try again later.",
@@ -114,6 +121,10 @@ class RateLimiter(BaseHTTPMiddleware):
         )
 
         if not allowed:
+            logger.warning(
+                f"DIAGNOSTIC: Hourly rate limit EXCEEDED for {client_ip} on {request.url.path}. "
+                f"Raising HTTPException(429)"
+            )
             raise HTTPException(
                 status_code=429,
                 detail="Hourly rate limit exceeded. Please try again later.",

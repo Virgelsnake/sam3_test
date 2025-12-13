@@ -27,7 +27,8 @@ export interface UploadResponse {
   video_id: string;
   url: string;
   filename: string;
-  size: number;
+  size_mb: number;
+  path: string;
 }
 
 export interface JobCreateRequest {

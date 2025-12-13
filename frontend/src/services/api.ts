@@ -47,6 +47,12 @@ export async function cancelJob(jobId: string): Promise<void> {
   await api.delete(`/api/jobs/${jobId}`);
 }
 
+export async function listJobs(status?: string): Promise<Job[]> {
+  const params = status ? { status } : {};
+  const response = await api.get<Job[]>('/api/jobs', { params });
+  return response.data;
+}
+
 export async function healthCheck(): Promise<{ status: string }> {
   const response = await api.get<{ status: string }>('/api/health');
   return response.data;

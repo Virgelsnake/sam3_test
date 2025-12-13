@@ -1,7 +1,7 @@
 """Database service for Supabase operations."""
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from supabase import create_client, Client
@@ -164,6 +164,50 @@ class DatabaseService:
         }
 
         self.client.table("jobs").update(data).eq("id", str(job_id)).execute()
+
+    async def list_jobs(
+        self,
+        status: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[JobResponse]:
+        """
+        List jobs with optional filtering.
+
+        Args:
+            status: Optional status filter.
+            limit: Maximum number of jobs to return.
+
+        Returns:
+            List of JobResponse objects.
+        """
+        query = self.client.table("jobs").select("*").order("created_at", desc=True).limit(limit)
+
+        if status:
+            query = query.eq("status", status)
+
+        result = query.execute()
+
+        jobs = []
+        for job_data in result.data:
+            jobs.append(
+                JobResponse(
+                    id=job_data["id"],
+                    status=JobState(job_data["status"]),
+                    prompt=job_data["prompt"],
+                    video_path=job_data["video_path"],
+                    progress=job_data["progress"],
+                    mask_video_url=job_data.get("mask_video_url"),
+                    composite_video_url=job_data.get("composite_video_url"),
+                    frame_count=job_data.get("frame_count"),
+                    objects_detected=job_data.get("objects_detected"),
+                    error_message=job_data.get("error_message"),
+                    created_at=job_data["created_at"],
+                    started_at=job_data.get("started_at"),
+                    completed_at=job_data.get("completed_at"),
+                )
+            )
+
+        return jobs
 
 
 # Singleton instance

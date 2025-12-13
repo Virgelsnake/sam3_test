@@ -151,7 +151,54 @@ def create_mask_video(
         out.write(mask)
 
     out.release()
+    
+    # Convert to H.264 for browser compatibility
+    output_path = convert_to_h264(output_path)
+    
     return output_path
+
+
+def convert_to_h264(input_path: str) -> str:
+    """
+    Convert video to H.264 codec for browser compatibility.
+    
+    Args:
+        input_path: Path to the input video.
+        
+    Returns:
+        str: Path to the converted video (same as input, overwritten).
+    """
+    import subprocess
+    
+    temp_output = input_path + ".h264.mp4"
+    
+    try:
+        # Convert using ffmpeg with H.264 codec
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", input_path,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                temp_output
+            ],
+            check=True,
+            capture_output=True,
+        )
+        
+        # Replace original with converted
+        os.replace(temp_output, input_path)
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg conversion failed: {e.stderr.decode() if e.stderr else str(e)}")
+        # If conversion fails, keep original
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+    except FileNotFoundError:
+        print("FFmpeg not found, keeping original codec")
+    
+    return input_path
 
 
 def create_composite_video(
@@ -214,6 +261,10 @@ def create_composite_video(
         out.write(frame_bgr.astype(np.uint8))
 
     out.release()
+    
+    # Convert to H.264 for browser compatibility
+    output_path = convert_to_h264(output_path)
+    
     return output_path
 
 

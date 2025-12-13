@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { createJob, getJob, getJobStatus, cancelJob } from '@/services/api';
+import { createJob, getJob, getJobStatus, cancelJob, listJobs } from '@/services/api';
 import type { Job, JobStatus } from '@/types';
 
 export function useCreateJob() {
@@ -45,5 +45,12 @@ export function useJobStatus(jobId: string | null, enabled = true) {
 export function useCancelJob() {
   return useMutation<void, Error, string>({
     mutationFn: cancelJob,
+  });
+}
+
+export function useJobs(status?: string) {
+  return useQuery<Job[], Error>({
+    queryKey: ['jobs', status],
+    queryFn: () => listJobs(status),
   });
 }

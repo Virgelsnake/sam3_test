@@ -26,7 +26,7 @@ class ModalClientService:
         """Get the Modal function for processing videos."""
         if self._function is None:
             # Look up the deployed Modal function
-            self._function = modal.Function.lookup(
+            self._function = modal.Function.from_name(
                 "sam3-video-segmentation",
                 "process_video_job",
             )
@@ -96,7 +96,7 @@ class ModalClientService:
             dict: Health status from the worker.
         """
         try:
-            health_fn = modal.Function.lookup(
+            health_fn = modal.Function.from_name(
                 "sam3-video-segmentation",
                 "health_check",
             )

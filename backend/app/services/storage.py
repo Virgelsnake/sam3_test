@@ -121,6 +121,30 @@ class StorageService:
 
         return response
 
+    async def get_output_url(self, job_id: str, filename: str) -> Optional[str]:
+        """
+        Get a signed URL for an output file if it exists.
+
+        Args:
+            job_id: The job ID.
+            filename: The output filename (e.g., 'mask.mp4', 'composite.mp4').
+
+        Returns:
+            str: Signed URL if file exists, None otherwise.
+        """
+        settings = get_settings()
+        path = f"{job_id}/{filename}"
+
+        try:
+            # Try to create a signed URL - will fail if file doesn't exist
+            url = self.client.storage.from_(settings.output_bucket).create_signed_url(
+                path=path,
+                expires_in=3600,
+            )
+            return url.get("signedURL")
+        except Exception:
+            return None
+
 
 # Singleton instance
 storage_service = StorageService()

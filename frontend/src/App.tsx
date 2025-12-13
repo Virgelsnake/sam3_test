@@ -6,9 +6,11 @@ import { PromptInput } from '@/components/PromptInput';
 import { JobStatus } from '@/components/JobStatus';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { DownloadButtons } from '@/components/DownloadButtons';
+import { JobHistory } from '@/components/JobHistory';
 import { Button } from '@/components/ui/button';
 import { useUpload } from '@/hooks/useUpload';
 import { useCreateJob, useJob } from '@/hooks/useJob';
+import type { Job } from '@/types';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -36,7 +38,7 @@ function AppContent() {
     async (file: File) => {
       try {
         const result = await uploadMutation.mutateAsync(file);
-        setVideoId(result.video_id);
+        setVideoId(result.path); // Use path (includes extension) instead of video_id
         setOriginalVideoUrl(result.url);
         setAppState('prompt');
       } catch (error) {
@@ -69,6 +71,11 @@ function AppContent() {
     createJobMutation.reset();
   }, [uploadMutation, createJobMutation]);
 
+  const handleSelectJob = useCallback((selectedJob: Job) => {
+    setJobId(selectedJob.id);
+    setAppState('results');
+  }, []);
+
   // Auto-transition to results when job completes
   if (job?.status === 'completed' && appState === 'processing') {
     setAppState('results');
@@ -89,10 +96,13 @@ function AppContent() {
 
         <main className="space-y-6">
           {appState === 'upload' && (
-            <VideoUpload
-              onUpload={handleUpload}
-              isUploading={uploadMutation.isPending}
-            />
+            <>
+              <VideoUpload
+                onUpload={handleUpload}
+                isUploading={uploadMutation.isPending}
+              />
+              <JobHistory onSelectJob={handleSelectJob} />
+            </>
           )}
 
           {appState === 'prompt' && (

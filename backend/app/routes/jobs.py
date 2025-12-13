@@ -1,9 +1,9 @@
 """Job management endpoints."""
 
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from ..config import get_settings
@@ -26,6 +26,25 @@ class JobCompleteRequest(BaseModel):
     frame_count: Optional[int] = None
     objects_detected: Optional[int] = None
     error: Optional[str] = None
+
+
+@router.get("", response_model=List[JobResponse])
+async def list_jobs(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    limit: int = Query(20, ge=1, le=100),
+) -> List[JobResponse]:
+    """
+    List jobs with optional status filter.
+
+    Args:
+        status_filter: Filter by status (completed, failed, processing, pending).
+        limit: Maximum number of jobs to return.
+
+    Returns:
+        List of jobs ordered by creation date (newest first).
+    """
+    jobs = await database_service.list_jobs(status=status_filter, limit=limit)
+    return jobs
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
@@ -108,6 +127,54 @@ async def get_job(job_id: UUID) -> JobResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
         )
+
+    # Check if job is processing but results exist in storage (callback may have failed)
+    if job.status.value == "processing":
+        try:
+            mask_url = await storage_service.get_output_url(str(job_id), "mask.mp4")
+            composite_url = await storage_service.get_output_url(str(job_id), "composite.mp4")
+            
+            if mask_url and composite_url:
+                # Results exist - update job status
+                await database_service.update_job_results(
+                    job_id=job_id,
+                    mask_video_url=mask_url,
+                    composite_video_url=composite_url,
+                    frame_count=0,  # Not available from storage
+                    objects_detected=0,  # Not available from storage
+                )
+                # Refresh job data
+                job = await database_service.get_job(job_id)
+        except Exception:
+            # If storage check fails, just return current job state
+            pass
+
+    # For completed jobs, refresh signed URLs (they expire after 1 hour)
+    if job.status.value == "completed" and job.mask_video_url and job.composite_video_url:
+        try:
+            fresh_mask_url = await storage_service.get_output_url(str(job_id), "mask.mp4")
+            fresh_composite_url = await storage_service.get_output_url(str(job_id), "composite.mp4")
+            
+            if fresh_mask_url and fresh_composite_url:
+                # Return job with fresh URLs (don't update DB, just return fresh)
+                from ..models.job import JobResponse
+                return JobResponse(
+                    id=job.id,
+                    status=job.status,
+                    prompt=job.prompt,
+                    video_path=job.video_path,
+                    progress=job.progress,
+                    mask_video_url=fresh_mask_url,
+                    composite_video_url=fresh_composite_url,
+                    frame_count=job.frame_count,
+                    objects_detected=job.objects_detected,
+                    error_message=job.error_message,
+                    created_at=job.created_at,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                )
+        except Exception:
+            pass
 
     return job
 

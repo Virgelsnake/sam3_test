@@ -39,7 +39,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Configure CORS
+    # Add rate limiting (60 requests/minute, 1000 requests/hour)
+    # Note: Middleware is executed in reverse order of addition
+    app.add_middleware(RateLimiter, requests_per_minute=60, requests_per_hour=1000)
+
+    # Add error handling middleware
+    error_handler_middleware(app)
+
+    # Configure CORS (added last so it runs first)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -47,12 +54,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Add error handling middleware
-    error_handler_middleware(app)
-
-    # Add rate limiting (60 requests/minute, 1000 requests/hour)
-    app.add_middleware(RateLimiter, requests_per_minute=60, requests_per_hour=1000)
 
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
 
