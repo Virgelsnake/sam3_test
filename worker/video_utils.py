@@ -208,17 +208,21 @@ def create_composite_video(
     fps: float,
     color: tuple[int, int, int] = (0, 255, 0),
     opacity: float = 0.5,
+    individual_masks: dict[int, dict[int, np.ndarray]] = None,
+    tracked_objects: dict = None,
 ) -> str:
     """
     Create a composite video with mask overlay on original frames.
 
     Args:
         frames: List of original video frames (RGB).
-        masks: Dictionary mapping frame index to mask array.
+        masks: Dictionary mapping frame index to combined mask array.
         output_path: Path to save the output video.
         fps: Frames per second for output video.
-        color: RGB color for the mask overlay.
+        color: RGB color for the mask overlay (used if no individual_masks).
         opacity: Opacity of the mask overlay (0-1).
+        individual_masks: Optional dict[frame_idx][obj_id] -> mask for multi-color rendering.
+        tracked_objects: Optional tracking data for color assignment by category.
 
     Returns:
         str: Path to the created video.
@@ -230,11 +234,94 @@ def create_composite_video(
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height), isColor=True)
 
+    # Define distinct colors for different objects/categories (BGR format)
+    CATEGORY_COLORS = {
+        "chair": (0, 255, 0),      # Green
+        "office chair": (0, 255, 0),
+        "desk": (255, 165, 0),     # Orange
+        "office desk": (255, 165, 0),
+        "table": (255, 165, 0),
+        "monitor": (255, 0, 255),  # Magenta
+        "computer monitor": (255, 0, 255),
+        "computer": (255, 255, 0), # Cyan
+        "desktop computer": (255, 255, 0),
+        "laptop": (255, 255, 0),
+        "keyboard": (0, 255, 255), # Yellow
+        "computer keyboard": (0, 255, 255),
+        "mouse": (128, 0, 255),    # Pink
+        "computer mouse": (128, 0, 255),
+        "person": (0, 0, 255),     # Red
+        "phone": (255, 128, 0),    # Light blue
+        "lamp": (0, 128, 255),     # Orange-ish
+        "plant": (0, 128, 0),      # Dark green
+        "bottle": (128, 128, 255), # Light pink
+        "cup": (128, 255, 128),    # Light green
+    }
+    
+    # Fallback colors for objects without category match
+    FALLBACK_COLORS = [
+        (0, 255, 0),    # Green
+        (255, 0, 0),    # Blue
+        (0, 0, 255),    # Red
+        (255, 255, 0),  # Cyan
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (128, 0, 255),  # Pink
+        (255, 128, 0),  # Light blue
+        (0, 128, 255),  # Orange
+        (128, 255, 0),  # Teal
+        (255, 0, 128),  # Purple
+        (0, 255, 128),  # Spring green
+    ]
+    
+    # Build object ID to color mapping
+    obj_colors = {}
+    if tracked_objects:
+        for obj_id, obj_data in tracked_objects.items():
+            category = obj_data.get("category", "").lower()
+            if category in CATEGORY_COLORS:
+                obj_colors[int(obj_id)] = CATEGORY_COLORS[category]
+            else:
+                # Use fallback color based on object ID
+                obj_colors[int(obj_id)] = FALLBACK_COLORS[int(obj_id) % len(FALLBACK_COLORS)]
+
     for frame_idx, frame in enumerate(frames):
         # Convert RGB to BGR for OpenCV
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-        if frame_idx in masks:
+        # Use individual masks if available for multi-color rendering
+        if individual_masks and frame_idx in individual_masks:
+            frame_obj_masks = individual_masks[frame_idx]
+            
+            for obj_id, mask in frame_obj_masks.items():
+                if mask is None:
+                    continue
+                    
+                # Ensure mask is 2D
+                if mask.ndim > 2:
+                    mask = mask.squeeze()
+
+                # Resize mask if needed
+                if mask.shape[:2] != (height, width):
+                    mask = cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
+
+                # Get color for this object
+                obj_color = obj_colors.get(int(obj_id), FALLBACK_COLORS[int(obj_id) % len(FALLBACK_COLORS)])
+
+                # Create colored overlay for this object
+                overlay = np.zeros_like(frame_bgr)
+                overlay[mask > 0.5] = obj_color
+
+                # Blend overlay with frame
+                mask_3d = np.stack([mask] * 3, axis=-1)
+                frame_bgr = np.where(
+                    mask_3d > 0.5,
+                    cv2.addWeighted(frame_bgr, 1 - opacity, overlay, opacity, 0),
+                    frame_bgr,
+                )
+        
+        # Fall back to combined mask with single color
+        elif frame_idx in masks:
             mask = masks[frame_idx]
 
             # Ensure mask is 2D

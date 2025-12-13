@@ -10,6 +10,7 @@ export interface Job {
   composite_video_url?: string;
   frame_count?: number;
   objects_detected?: number;
+  inventory?: Record<string, number>;  // Item name -> count
   error_message?: string;
   created_at: string;
   started_at?: string;

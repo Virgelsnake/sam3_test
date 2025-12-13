@@ -25,6 +25,7 @@ class JobCompleteRequest(BaseModel):
     composite_video_url: Optional[str] = None
     frame_count: Optional[int] = None
     objects_detected: Optional[int] = None
+    inventory: Optional[dict] = None
     error: Optional[str] = None
 
 
@@ -168,6 +169,7 @@ async def get_job(job_id: UUID) -> JobResponse:
                     composite_video_url=fresh_composite_url,
                     frame_count=job.frame_count,
                     objects_detected=job.objects_detected,
+                    inventory=job.inventory,
                     error_message=job.error_message,
                     created_at=job.created_at,
                     started_at=job.started_at,
@@ -268,6 +270,7 @@ async def job_complete(job_id: UUID, data: JobCompleteRequest) -> dict:
             composite_video_url=data.composite_video_url,
             frame_count=data.frame_count or 0,
             objects_detected=data.objects_detected or 0,
+            inventory=data.inventory,
         )
     elif data.status == "failed":
         await database_service.update_job_status(

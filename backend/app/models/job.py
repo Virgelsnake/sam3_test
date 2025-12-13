@@ -80,6 +80,7 @@ class JobResponse(BaseModel):
     # Metadata
     frame_count: Optional[int] = None
     objects_detected: Optional[int] = None
+    inventory: Optional[dict] = None  # Item inventory from classification
     error_message: Optional[str] = None
 
     # Timestamps

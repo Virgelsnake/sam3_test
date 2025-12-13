@@ -98,6 +98,7 @@ class DatabaseService:
             composite_video_url=job_data.get("composite_video_url"),
             frame_count=job_data.get("frame_count"),
             objects_detected=job_data.get("objects_detected"),
+            inventory=job_data.get("inventory"),
             error_message=job_data.get("error_message"),
             created_at=job_data["created_at"],
             started_at=job_data.get("started_at"),
@@ -142,6 +143,7 @@ class DatabaseService:
         composite_video_url: str,
         frame_count: int,
         objects_detected: int,
+        inventory: Optional[dict] = None,
     ) -> None:
         """
         Update job with processing results.
@@ -152,6 +154,7 @@ class DatabaseService:
             composite_video_url: URL to the composite video.
             frame_count: Number of frames processed.
             objects_detected: Number of objects detected.
+            inventory: Optional inventory of detected items.
         """
         data = {
             "status": JobState.COMPLETED.value,
@@ -162,6 +165,9 @@ class DatabaseService:
             "objects_detected": objects_detected,
             "completed_at": datetime.utcnow().isoformat(),
         }
+        
+        if inventory is not None:
+            data["inventory"] = inventory
 
         self.client.table("jobs").update(data).eq("id", str(job_id)).execute()
 
@@ -200,6 +206,7 @@ class DatabaseService:
                     composite_video_url=job_data.get("composite_video_url"),
                     frame_count=job_data.get("frame_count"),
                     objects_detected=job_data.get("objects_detected"),
+                    inventory=job_data.get("inventory"),
                     error_message=job_data.get("error_message"),
                     created_at=job_data["created_at"],
                     started_at=job_data.get("started_at"),

@@ -7,6 +7,7 @@ import { JobStatus } from '@/components/JobStatus';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { DownloadButtons } from '@/components/DownloadButtons';
 import { JobHistory } from '@/components/JobHistory';
+import { InventoryList } from '@/components/InventoryList';
 import { Button } from '@/components/ui/button';
 import { useUpload } from '@/hooks/useUpload';
 import { useCreateJob, useJob } from '@/hooks/useJob';
@@ -146,6 +147,11 @@ function AppContent() {
                 maskUrl={job.mask_video_url}
                 compositeUrl={job.composite_video_url}
               />
+              
+              {job.inventory && Object.keys(job.inventory).length > 0 && (
+                <InventoryList inventory={job.inventory} />
+              )}
+              
               <DownloadButtons
                 maskUrl={job.mask_video_url}
                 compositeUrl={job.composite_video_url}

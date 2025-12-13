@@ -57,19 +57,22 @@ sam3_image = (
         # Install SAM 3 from GitHub
         "sam3 @ git+https://github.com/facebookresearch/sam3.git"
     )
-    .add_local_file("sam3_service.py", "/root/sam3_service.py")
-    .add_local_file("video_utils.py", "/root/video_utils.py")
+    .pip_install("openai")
+    .add_local_file("worker/sam3_service.py", "/root/sam3_service.py")
+    .add_local_file("worker/video_utils.py", "/root/video_utils.py")
+    .add_local_file("worker/classification_service.py", "/root/classification_service.py")
 )
 
-# Secrets for HuggingFace and Supabase
+# Secrets for HuggingFace, Supabase, and OpenAI
 hf_secret = modal.Secret.from_name("huggingface-secret")
 supabase_secret = modal.Secret.from_name("supabase-secret")
+openai_secret = modal.Secret.from_name("openai-secret")
 
 @app.function(
     gpu="A100-80GB",  # Need 80GB - SAM3 memory grows with frames processed
     image=sam3_image,
     timeout=900,  # Increased timeout for longer videos
-    secrets=[hf_secret, supabase_secret],
+    secrets=[hf_secret, supabase_secret, openai_secret],
     retries=1,
 )
 def process_video_job(
@@ -100,6 +103,7 @@ def process_video_job(
     import httpx
 
     from sam3_service import SAM3Service
+    from classification_service import ClassificationService
     from video_utils import (
         cleanup_temp_files,
         create_composite_video,
@@ -141,12 +145,15 @@ def process_video_job(
         def progress_callback(progress: int, message: str):
             print(f"[Job {job_id}] [{progress}%] {message}")
 
-        print(f"[Job {job_id}] Running segmentation...")
+        print(f"[Job {job_id}] Running segmentation with dynamic inventory tracking...")
         result = sam3.process_video(video_path, prompt, progress_callback)
 
         masks = result["masks"]
+        individual_masks = result.get("individual_masks", {})
         objects_detected = result["objects_detected"]
         frame_count = result["frame_count"]
+        inventory_snapshots = result.get("inventory_snapshots", [])
+        tracked_objects = result.get("tracked_objects", {})
 
         if objects_detected == 0:
             return {
@@ -154,10 +161,41 @@ def process_video_job(
                 "status": "completed",
                 "objects_detected": 0,
                 "frame_count": 0,
-                "message": f"No objects matching '{prompt}' found in video",
+                "message": f"No objects found in video",
             }
 
-        # Step 4: Create output videos
+        # Log tracking results
+        print(f"[Job {job_id}] Tracking complete: {objects_detected} unique objects detected")
+        print(f"[Job {job_id}] Inventory snapshots: {len(inventory_snapshots)}")
+        for snapshot in inventory_snapshots:
+            print(f"[Job {job_id}]   Frame {snapshot['frame_index']}: {snapshot['objects']} ({snapshot['reason']})")
+
+        # Step 4: Classify/verify detected objects using OpenAI GPT-4V
+        print(f"[Job {job_id}] Running object classification with GPT-4V...")
+        inventory = {}
+        try:
+            classifier = ClassificationService()
+            classifier.initialize()
+            
+            classification_result = classifier.classify_video_sample(
+                frames=frames,
+                all_masks=masks,
+                context=prompt,  # Use user's prompt as context
+                individual_masks=individual_masks,
+                tracked_objects=tracked_objects,
+            )
+            
+            inventory = classification_result.get("inventory", {})
+            print(f"[Job {job_id}] Classification complete. Inventory: {inventory}")
+        except Exception as e:
+            print(f"[Job {job_id}] Classification failed, using tracking data: {e}")
+            # Fall back to tracking-based inventory
+            if tracked_objects:
+                for obj_id, obj_data in tracked_objects.items():
+                    category = obj_data.get("category", "unknown").lower()
+                    inventory[category] = inventory.get(category, 0) + 1
+
+        # Step 5: Create output videos
         print(f"[Job {job_id}] Creating mask video...")
         mask_video_path = tempfile.mktemp(suffix="_mask.mp4")
         temp_files.append(mask_video_path)
@@ -177,11 +215,13 @@ def process_video_job(
             masks,
             composite_video_path,
             video_info["fps"],
-            color=(0, 255, 0),  # Green overlay
+            color=(0, 255, 0),  # Green overlay (fallback)
             opacity=0.5,
+            individual_masks=individual_masks,
+            tracked_objects=tracked_objects,
         )
 
-        # Step 5: Upload results to Supabase
+        # Step 6: Upload results to Supabase
         print(f"[Job {job_id}] Uploading results...")
         mask_url = upload_to_supabase(
             mask_video_path,
@@ -206,16 +246,40 @@ def process_video_job(
             "composite_video_url": composite_url,
             "frame_count": frame_count,
             "objects_detected": objects_detected,
+            "inventory": inventory,
+            "inventory_snapshots": inventory_snapshots,
+            "tracked_objects": tracked_objects,
         }
 
-        # Step 6: Callback to API if URL provided
-        if callback_url:
-            print(f"[Job {job_id}] Sending callback to {callback_url}")
-            try:
-                with httpx.Client(timeout=30.0) as client:
-                    client.post(callback_url, json=result)
-            except Exception as e:
-                print(f"[Job {job_id}] Callback failed: {e}")
+        # Step 7: Update job directly in Supabase (more reliable than callback)
+        print(f"[Job {job_id}] Updating job in database...")
+        try:
+            from supabase import create_client
+            from datetime import datetime
+            
+            supabase_client = create_client(supabase_url, supabase_key)
+            update_data = {
+                "status": "completed",
+                "mask_video_url": mask_url,
+                "composite_video_url": composite_url,
+                "frame_count": frame_count,
+                "objects_detected": objects_detected,
+                "inventory": inventory,
+                "completed_at": datetime.utcnow().isoformat(),
+            }
+            supabase_client.table("jobs").update(update_data).eq("id", job_id).execute()
+            print(f"[Job {job_id}] Database updated successfully")
+        except Exception as e:
+            print(f"[Job {job_id}] Database update failed: {e}")
+            
+            # Fallback: try callback
+            if callback_url:
+                print(f"[Job {job_id}] Trying callback to {callback_url}")
+                try:
+                    with httpx.Client(timeout=30.0) as client:
+                        client.post(callback_url, json=result)
+                except Exception as cb_error:
+                    print(f"[Job {job_id}] Callback also failed: {cb_error}")
 
         print(f"[Job {job_id}] Completed successfully!")
         return result
