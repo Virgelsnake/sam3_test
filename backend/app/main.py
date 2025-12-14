@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .middleware import error_handler_middleware, RateLimiter
-from .routes import health_router, jobs_router, uploads_router
+from .routes import health_router, jobs_router, uploads_router, images_router
 from .services.queue import queue_service
 
 # Configure logging
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(uploads_router)
     app.include_router(jobs_router)
+    app.include_router(images_router)
 
     return app
 

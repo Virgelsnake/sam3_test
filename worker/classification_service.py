@@ -558,3 +558,157 @@ Respond in this exact JSON format:
             inventory[label] = max(1, estimated_count)
 
         return inventory
+
+    def generate_multi_image_inventory(
+        self,
+        images: list[np.ndarray],
+        context: str = "room inventory",
+    ) -> dict:
+        """
+        Generate inventory from multiple images of the same space using GPT-4V.
+        
+        This is the correct approach for multi-image inventory:
+        - Send ALL images to GPT-4V at once
+        - GPT-4V understands they're different views of the same space
+        - Returns deduplicated inventory (same object in multiple images = 1 count)
+        
+        Args:
+            images: List of RGB numpy arrays (different views of same space).
+            context: Context hint for inventory.
+            
+        Returns:
+            dict: {
+                "inventory": {"item": count, ...},
+                "items": [{"name": str, "count": int, "appears_in_images": [int, ...]}, ...],
+                "scene_description": str
+            }
+        """
+        if not self._initialized:
+            self.initialize()
+
+        if not images:
+            return {"inventory": {}, "items": [], "scene_description": "No images provided"}
+
+        # Encode all images
+        image_contents = []
+        for i, img in enumerate(images):
+            image_b64 = self._encode_image(img)
+            image_contents.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_b64}",
+                    "detail": "high"
+                }
+            })
+
+        prompt = f"""You are a professional inventory specialist analyzing {len(images)} photographs of the SAME room/space taken from different angles.
+
+Context: {context}
+
+YOUR TASK: Create a comprehensive, categorized inventory of EVERY physical item visible across all images.
+
+CRITICAL RULES:
+1. These images show the SAME physical space from different viewpoints
+2. The SAME physical object appearing in multiple images = count it ONCE
+3. Be EXHAUSTIVE - capture every single item, no matter how small
+4. Use DESCRIPTIVE labels (e.g., "Height-adjustable desk (wood top, white legs)" not just "desk")
+5. Group items into logical categories
+
+SCAN SYSTEMATICALLY - Look for:
+- FURNITURE: Desks, chairs, tables, shelving units, cabinets, drawers
+- ELECTRONICS: Monitors, laptops, keyboards, mice, webcams, speakers, cables
+- OFFICE SUPPLIES: Pens, notebooks, papers, folders, staplers, tape
+- STORAGE: Boxes, bags, backpacks, containers, file organizers
+- DÉCOR: Plants, artwork, photos, decorations, ornaments
+- LIGHTING: Lamps, light fixtures
+- FLOORING: Rugs, mats
+- FIXTURES: Radiators, blinds, windows
+- MISCELLANEOUS: Water bottles, mugs, toys, cables on floor, anything else
+
+For quantities of similar small items (cables, papers), use "multiple" or "several" or estimate.
+
+Respond in this exact JSON format:
+{{
+    "scene_description": "Detailed description of the room/space",
+    "categories": {{
+        "Furniture & Fixtures": [
+            {{"name": "Height-adjustable desk (wood top, white legs)", "count": 1, "appears_in_images": [2, 3, 4]}},
+            {{"name": "Office chair (wheeled, adjustable)", "count": 1, "appears_in_images": [2, 3, 4]}}
+        ],
+        "Electronics & Computing": [
+            {{"name": "External monitor", "count": 2, "appears_in_images": [2, 3, 4]}},
+            {{"name": "Laptop", "count": 1, "appears_in_images": [2, 3, 4]}}
+        ],
+        "Music Equipment": [
+            {{"name": "Digital keyboard/piano", "count": 1, "appears_in_images": [1, 2]}}
+        ]
+    }},
+    "items": [
+        {{"name": "Height-adjustable desk (wood top, white legs)", "count": 1, "category": "Furniture & Fixtures", "appears_in_images": [2, 3, 4]}}
+    ]
+}}
+
+BE THOROUGH. Examine every corner, surface, floor, and shelf. Miss nothing."""
+
+        try:
+            # Build message with all images
+            content = [{"type": "text", "text": prompt}] + image_contents
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": content}],
+                max_tokens=4096,
+                response_format={"type": "json_object"}
+            )
+
+            result_text = response.choices[0].message.content
+            if result_text is None:
+                print("[Classification] GPT-4V returned empty response")
+                return {"inventory": {}, "items": [], "scene_description": "Error: empty response"}
+
+            import json
+            result = json.loads(result_text)
+
+            # Build inventory dict from items list OR categories
+            inventory = {}
+            items = result.get("items", [])
+            categories = result.get("categories", {})
+            
+            # If categories provided, flatten them into items list
+            if categories and not items:
+                items = []
+                for category_name, category_items in categories.items():
+                    for item in category_items:
+                        item["category"] = category_name
+                        items.append(item)
+            
+            # Build inventory from items
+            for item in items:
+                name = item.get("name", "unknown").strip()
+                count = item.get("count", 1)
+                # Handle string counts like "multiple" or "several"
+                if isinstance(count, str):
+                    if count.lower() in ["multiple", "several", "many"]:
+                        count = 3
+                    else:
+                        try:
+                            count = int(count)
+                        except:
+                            count = 1
+                inventory[name.lower()] = count
+
+            print(f"[Classification] Multi-image inventory: {len(items)} unique items")
+            print(f"[Classification] Categories: {list(categories.keys()) if categories else 'none'}")
+
+            return {
+                "inventory": inventory,
+                "items": items,
+                "categories": categories,
+                "scene_description": result.get("scene_description", ""),
+                "total_unique_items": len(items),
+                "total_item_count": sum(inventory.values()),
+            }
+
+        except Exception as e:
+            print(f"[Classification] Error in multi-image inventory: {e}")
+            return {"inventory": {}, "items": [], "scene_description": f"Error: {str(e)}"}

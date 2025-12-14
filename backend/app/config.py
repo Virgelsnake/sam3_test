@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     max_video_size_mb: int = 100
     max_video_duration_seconds: int = 60
     allowed_video_extensions: list[str] = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
+    
+    # Image batch settings
+    max_image_size_mb: int = 20
+    max_images_per_batch: int = 12
+    allowed_image_extensions: list[str] = [".jpg", ".jpeg", ".png", ".webp"]
 
 
 @lru_cache

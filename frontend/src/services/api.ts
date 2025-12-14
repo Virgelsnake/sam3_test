@@ -57,3 +57,50 @@ export async function healthCheck(): Promise<{ status: string }> {
   const response = await api.get<{ status: string }>('/api/health');
   return response.data;
 }
+
+// ==================== Image Batch API ====================
+
+import type { ImageJob, ImageUploadResponse, ImageJobCreateRequest } from '@/types';
+
+export async function uploadImages(files: File[]): Promise<ImageUploadResponse[]> {
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const response = await api.post<ImageUploadResponse[]>('/api/images/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+
+  return response.data;
+}
+
+export async function createImageJob(imageIds: string[], prompt: string): Promise<ImageJob> {
+  const payload: ImageJobCreateRequest = {
+    image_ids: imageIds,
+    prompt,
+  };
+
+  const response = await api.post<ImageJob>('/api/images/jobs', payload);
+  return response.data;
+}
+
+export async function getImageJob(jobId: string): Promise<ImageJob> {
+  const response = await api.get<ImageJob>(`/api/images/jobs/${jobId}`);
+  return response.data;
+}
+
+export async function listImageJobs(status?: string): Promise<ImageJob[]> {
+  const params = status ? { status } : {};
+  const response = await api.get<ImageJob[]>('/api/images/jobs', { params });
+  return response.data;
+}
+
+export async function updateImageJobInventory(
+  jobId: string,
+  userInventory: Record<string, number>
+): Promise<void> {
+  await api.patch(`/api/images/jobs/${jobId}/inventory`, { user_inventory: userInventory });
+}

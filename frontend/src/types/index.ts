@@ -42,3 +42,42 @@ export interface JobCreateRequest {
 export interface ApiError {
   detail: string;
 }
+
+// ==================== Image Batch Types ====================
+
+export interface ImageJob {
+  id: string;
+  status: JobState;
+  prompt: string;
+  job_type: 'image_batch';
+  image_count: number;
+  image_paths: string[];
+  progress: number;
+  composite_images?: string[];
+  objects_detected?: number;
+  inventory?: Record<string, number>;
+  inventory_colors?: Record<string, string>;
+  user_inventory?: Record<string, number>;
+  per_image_results?: Array<{
+    image_idx: number;
+    objects_found: number;
+    categories: string[];
+  }>;
+  error_message?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface ImageUploadResponse {
+  image_id: string;
+  filename: string;
+  size_mb: number;
+  url: string;
+  path: string;
+}
+
+export interface ImageJobCreateRequest {
+  image_ids: string[];
+  prompt: string;
+}

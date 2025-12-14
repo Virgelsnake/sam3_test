@@ -105,6 +105,46 @@ class ModalClientService:
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
+    # ==================== Image Batch Processing ====================
+
+    @property
+    def process_images_function(self):
+        """Get the Modal function for processing image batches."""
+        if not hasattr(self, '_image_function') or self._image_function is None:
+            self._image_function = modal.Function.from_name(
+                "sam3-video-segmentation",
+                "process_image_batch_job",
+            )
+        return self._image_function
+
+    async def trigger_image_job(
+        self,
+        job_id: UUID,
+        image_urls: list[str],
+        prompt: str,
+        callback_url: Optional[str] = None,
+    ) -> str:
+        """
+        Trigger an image batch inventory job on Modal.
+
+        Args:
+            job_id: Unique identifier for the job.
+            image_urls: List of signed URLs to download input images.
+            prompt: Text prompt describing the inventory context.
+            callback_url: Optional URL to POST results to when complete.
+
+        Returns:
+            str: Modal call ID for tracking the job.
+        """
+        call = self.process_images_function.spawn(
+            job_id=str(job_id),
+            image_urls=image_urls,
+            prompt=prompt,
+            callback_url=callback_url,
+        )
+
+        return call.object_id
+
 
 # Singleton instance
 modal_client_service = ModalClientService()

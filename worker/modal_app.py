@@ -66,9 +66,10 @@ sam3_image = (
         "sam3 @ git+https://github.com/facebookresearch/sam3.git"
     )
     .pip_install("openai")
-    .add_local_file("worker/sam3_service.py", "/root/sam3_service.py")
-    .add_local_file("worker/video_utils.py", "/root/video_utils.py")
-    .add_local_file("worker/classification_service.py", "/root/classification_service.py")
+    .add_local_file("sam3_service.py", "/root/sam3_service.py")
+    .add_local_file("video_utils.py", "/root/video_utils.py")
+    .add_local_file("classification_service.py", "/root/classification_service.py")
+    .add_local_file("image_batch_service.py", "/root/image_batch_service.py")
 )
 
 # Secrets for HuggingFace, Supabase, and OpenAI
@@ -434,6 +435,192 @@ def benchmark_a100_40gb(video_url: str, prompt: str = "Generate an inventory of 
 def benchmark_a100_80gb(video_url: str, prompt: str = "Generate an inventory of detected items") -> dict:
     """Benchmark on A100-80GB GPU - $3.22/hour"""
     return _run_benchmark("A100-80GB", video_url, prompt)
+
+
+@app.function(
+    gpu="A10G",
+    image=sam3_image,
+    timeout=1800,
+    secrets=[hf_secret, supabase_secret, openai_secret],
+    retries=1,
+)
+def process_image_batch_job(
+    job_id: str,
+    image_urls: list,
+    prompt: str,
+    callback_url: Optional[str] = None,
+) -> dict:
+    """
+    Process a batch of images for inventory generation.
+
+    This function:
+    1. Downloads all images from Supabase
+    2. Runs SAM3 + GPT-4V detection on each image
+    3. Performs cross-image deduplication
+    4. Creates composite images with overlays
+    5. Uploads results to Supabase
+    6. Updates job status in database
+
+    Args:
+        job_id: Unique identifier for this job.
+        image_urls: List of signed URLs to download input images.
+        prompt: Text prompt describing the inventory context.
+        callback_url: Optional URL to POST results to.
+
+    Returns:
+        dict: Processing results including inventory and composite images.
+    """
+    import httpx
+    import cv2
+    import numpy as np
+    from PIL import Image
+    import io
+
+    from image_batch_service import ImageBatchService
+    from video_utils import cleanup_temp_files, upload_to_supabase
+
+    print(f"[ImageJob {job_id}] Starting image batch processing")
+    print(f"[ImageJob {job_id}] Processing {len(image_urls)} images")
+    print(f"[ImageJob {job_id}] Prompt: {prompt}")
+
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+    temp_files = []
+
+    try:
+        # Step 1: Download all images
+        print(f"[ImageJob {job_id}] Downloading images...")
+        images = []
+        for i, url in enumerate(image_urls):
+            try:
+                with httpx.Client(timeout=60.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    
+                    # Load image
+                    img_data = io.BytesIO(response.content)
+                    pil_image = Image.open(img_data).convert("RGB")
+                    images.append(np.array(pil_image))
+                    print(f"[ImageJob {job_id}] Downloaded image {i+1}/{len(image_urls)}")
+            except Exception as e:
+                print(f"[ImageJob {job_id}] Failed to download image {i+1}: {e}")
+                continue
+
+        if not images:
+            return {
+                "job_id": job_id,
+                "status": "failed",
+                "error": "Could not download any images",
+            }
+
+        # Step 2: Initialize service and process images
+        print(f"[ImageJob {job_id}] Initializing image batch service...")
+        service = ImageBatchService()
+        service.initialize()
+
+        def progress_callback(progress: int, message: str):
+            print(f"[ImageJob {job_id}] [{progress}%] {message}")
+
+        print(f"[ImageJob {job_id}] Running segmentation with cross-image deduplication...")
+        result = service.process_image_batch(images, prompt, progress_callback)
+
+        inventory = result.get("inventory", {})
+        inventory_colors = result.get("inventory_colors", {})
+        objects_detected = result.get("objects_detected", 0)
+        per_image_results = result.get("per_image_results", [])
+        composite_images_np = result.get("composite_images", [])
+
+        if objects_detected == 0:
+            return {
+                "job_id": job_id,
+                "status": "completed",
+                "objects_detected": 0,
+                "inventory": {},
+                "message": "No objects found in images",
+            }
+
+        # Step 3: Upload composite images to Supabase
+        print(f"[ImageJob {job_id}] Uploading composite images...")
+        composite_urls = []
+        for i, composite_np in enumerate(composite_images_np):
+            # Save to temp file
+            temp_path = tempfile.mktemp(suffix=f"_composite_{i}.jpg")
+            temp_files.append(temp_path)
+            
+            pil_image = Image.fromarray(composite_np)
+            pil_image.save(temp_path, "JPEG", quality=90)
+
+            # Upload to Supabase
+            url = upload_to_supabase(
+                temp_path,
+                "outputs",
+                f"{job_id}/composite_{i}.jpg",
+                supabase_url,
+                supabase_key,
+            )
+            composite_urls.append(url)
+
+        result_data = {
+            "job_id": job_id,
+            "status": "completed",
+            "composite_images": composite_urls,
+            "objects_detected": objects_detected,
+            "inventory": inventory,
+            "inventory_colors": inventory_colors,
+            "per_image_results": per_image_results,
+        }
+
+        # Step 4: Update job in Supabase
+        print(f"[ImageJob {job_id}] Updating job in database...")
+        try:
+            from supabase import create_client
+            from datetime import datetime
+
+            supabase_client = create_client(supabase_url, supabase_key)
+            update_data = {
+                "status": "completed",
+                "composite_images": composite_urls,
+                "objects_detected": objects_detected,
+                "inventory": inventory,
+                "inventory_colors": inventory_colors,
+                "per_image_results": per_image_results,
+                "completed_at": datetime.utcnow().isoformat(),
+            }
+            supabase_client.table("jobs").update(update_data).eq("id", job_id).execute()
+            print(f"[ImageJob {job_id}] Database updated successfully")
+        except Exception as e:
+            print(f"[ImageJob {job_id}] Database update failed: {e}")
+
+            if callback_url:
+                print(f"[ImageJob {job_id}] Trying callback to {callback_url}")
+                try:
+                    with httpx.Client(timeout=30.0) as client:
+                        client.post(callback_url, json=result_data)
+                except Exception as cb_error:
+                    print(f"[ImageJob {job_id}] Callback also failed: {cb_error}")
+
+        print(f"[ImageJob {job_id}] Completed successfully! Inventory: {inventory}")
+        return result_data
+
+    except Exception as e:
+        error_result = {
+            "job_id": job_id,
+            "status": "failed",
+            "error": str(e),
+        }
+
+        if callback_url:
+            try:
+                with httpx.Client(timeout=30.0) as client:
+                    client.post(callback_url, json=error_result)
+            except Exception:
+                pass
+
+        raise
+
+    finally:
+        cleanup_temp_files(*temp_files)
 
 
 @app.function(gpu="A10G", image=sam3_image, timeout=120, secrets=[hf_secret])
