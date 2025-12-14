@@ -150,8 +150,10 @@ function AppContent() {
               
               {job.inventory && Object.keys(job.inventory).length > 0 && (
                 <InventoryList 
+                  jobId={job.id}
                   inventory={job.inventory} 
                   inventoryColors={job.inventory_colors}
+                  userInventory={job.user_inventory}
                 />
               )}
               

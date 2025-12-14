@@ -107,6 +107,10 @@ List objects as simple noun phrases suitable for object detection."""
             )
 
             result_text = response.choices[0].message.content
+            if result_text is None:
+                print("[Classification] GPT-4V returned empty response - check OPENAI_API_KEY")
+                return []
+            
             import json
             result = json.loads(result_text)
             
@@ -117,6 +121,7 @@ List objects as simple noun phrases suitable for object detection."""
 
         except Exception as e:
             print(f"[Classification] Error in open-vocabulary identification: {e}")
+            # Return empty list but don't crash the pipeline
             return []
 
     def classify_frame_objects(
@@ -231,19 +236,16 @@ Only include objects you can see highlighted in the image."""
         # If we have tracking data with categories, use that as primary source
         if tracked_objects:
             inventory = self._build_inventory_from_tracking(tracked_objects)
+            print(f"[Classification] Built inventory from tracking: {inventory}")
             
-            # Optionally verify with visual classification on sample frames
-            if individual_masks:
-                verified_inventory = self._verify_inventory_with_vision(
-                    frames, individual_masks, tracked_objects, context
-                )
-                if verified_inventory:
-                    inventory = verified_inventory
+            # Vision verification is disabled - it only sees one frame and misses objects
+            # The tracking data is more reliable since it sees all frames
+            # TODO: Could use vision to correct category names, but not counts
             
             return {
                 "inventory": inventory,
                 "total_objects": sum(inventory.values()),
-                "source": "tracking_with_verification" if individual_masks else "tracking",
+                "source": "tracking",
                 "tracked_objects": tracked_objects,
             }
 

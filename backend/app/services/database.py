@@ -99,6 +99,8 @@ class DatabaseService:
             frame_count=job_data.get("frame_count"),
             objects_detected=job_data.get("objects_detected"),
             inventory=job_data.get("inventory"),
+            inventory_colors=job_data.get("inventory_colors"),
+            user_inventory=job_data.get("user_inventory"),
             error_message=job_data.get("error_message"),
             created_at=job_data["created_at"],
             started_at=job_data.get("started_at"),
@@ -207,6 +209,8 @@ class DatabaseService:
                     frame_count=job_data.get("frame_count"),
                     objects_detected=job_data.get("objects_detected"),
                     inventory=job_data.get("inventory"),
+                    inventory_colors=job_data.get("inventory_colors"),
+                    user_inventory=job_data.get("user_inventory"),
                     error_message=job_data.get("error_message"),
                     created_at=job_data["created_at"],
                     started_at=job_data.get("started_at"),
@@ -215,6 +219,21 @@ class DatabaseService:
             )
 
         return jobs
+
+    async def update_user_inventory(
+        self,
+        job_id: UUID,
+        user_inventory: Optional[dict],
+    ) -> None:
+        """
+        Update user-corrected inventory for a job.
+
+        Args:
+            job_id: The UUID of the job.
+            user_inventory: User-corrected inventory counts, or None to reset.
+        """
+        data = {"user_inventory": user_inventory}
+        self.client.table("jobs").update(data).eq("id", str(job_id)).execute()
 
 
 # Singleton instance

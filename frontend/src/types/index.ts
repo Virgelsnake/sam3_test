@@ -10,8 +10,9 @@ export interface Job {
   composite_video_url?: string;
   frame_count?: number;
   objects_detected?: number;
-  inventory?: Record<string, number>;  // Item name -> count
+  inventory?: Record<string, number>;  // Item name -> count (AI-detected)
   inventory_colors?: Record<string, string>;  // Item name -> hex color
+  user_inventory?: Record<string, number>;  // User-corrected counts
   error_message?: string;
   created_at: string;
   started_at?: string;

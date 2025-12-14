@@ -15,22 +15,86 @@ import numpy as np
 from PIL import Image
 
 
-def download_video(url: str, output_path: Optional[str] = None) -> str:
+def transcode_to_h264(input_path: str, output_path: Optional[str] = None) -> str:
+    """
+    Transcode video to H.264 codec for compatibility.
+    
+    iPhone .mov files use HEVC (H.265) which OpenCV may not decode properly.
+    This converts to H.264 which is universally supported.
+
+    Args:
+        input_path: Path to the input video file.
+        output_path: Optional path for output. If None, creates a temp file.
+
+    Returns:
+        str: Path to the transcoded video file.
+    """
+    import subprocess
+    
+    if output_path is None:
+        fd, output_path = tempfile.mkstemp(suffix=".mp4")
+        os.close(fd)
+    
+    # Use FFmpeg to transcode to H.264
+    cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-c:v", "libx264",      # H.264 codec
+        "-preset", "fast",       # Fast encoding
+        "-crf", "23",            # Quality (lower = better, 23 is default)
+        "-c:a", "aac",           # AAC audio
+        "-y",                    # Overwrite output
+        output_path
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout
+        )
+        if result.returncode != 0:
+            print(f"[Transcode] FFmpeg warning: {result.stderr[:500]}")
+        
+        # Verify output exists and has content
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[Transcode] Successfully transcoded to H.264: {output_path}")
+            return output_path
+        else:
+            print(f"[Transcode] Transcode failed, using original file")
+            return input_path
+            
+    except subprocess.TimeoutExpired:
+        print(f"[Transcode] Transcode timed out, using original file")
+        return input_path
+    except Exception as e:
+        print(f"[Transcode] Transcode error: {e}, using original file")
+        return input_path
+
+
+def download_video(url: str, output_path: Optional[str] = None, transcode: bool = True) -> str:
     """
     Download video from a URL to a local file.
 
     Args:
         url: URL to download from (e.g., Supabase signed URL).
         output_path: Optional path to save the video. If None, creates a temp file.
+        transcode: If True, transcode to H.264 for compatibility (handles iPhone HEVC).
 
     Returns:
         str: Path to the downloaded video file.
     """
     import httpx
 
+    # Determine original extension from URL
+    url_lower = url.lower().split('?')[0]  # Remove query params
+    is_mov = url_lower.endswith('.mov')
+    
     if output_path is None:
-        # Create temp file with .mp4 extension
-        fd, output_path = tempfile.mkstemp(suffix=".mp4")
+        # Create temp file preserving original extension
+        suffix = ".mov" if is_mov else ".mp4"
+        fd, output_path = tempfile.mkstemp(suffix=suffix)
         os.close(fd)
 
     with httpx.Client(timeout=300.0) as client:
@@ -40,6 +104,18 @@ def download_video(url: str, output_path: Optional[str] = None) -> str:
         with open(output_path, "wb") as f:
             f.write(response.content)
 
+    # Transcode if it's a .mov file (likely iPhone HEVC)
+    if transcode and is_mov:
+        print(f"[Download] Detected .mov file, transcoding to H.264 for compatibility...")
+        transcoded_path = transcode_to_h264(output_path)
+        if transcoded_path != output_path:
+            # Clean up original if transcode succeeded
+            try:
+                os.remove(output_path)
+            except:
+                pass
+            return transcoded_path
+    
     return output_path
 
 

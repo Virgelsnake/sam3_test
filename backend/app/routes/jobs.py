@@ -286,3 +286,78 @@ async def job_complete(job_id: UUID, data: JobCompleteRequest) -> dict:
         )
 
     return {"status": "ok", "job_id": str(job_id)}
+
+
+class UpdateInventoryRequest(BaseModel):
+    """Request body for updating user-corrected inventory."""
+    user_inventory: dict  # Item name -> user-corrected count
+
+
+@router.patch("/{job_id}/inventory")
+async def update_user_inventory(job_id: UUID, data: UpdateInventoryRequest) -> dict:
+    """
+    Update user-corrected inventory for a job.
+    
+    This allows users to override AI-detected quantities. The original
+    AI inventory is preserved in the 'inventory' field, while user
+    corrections are stored in 'user_inventory'.
+    
+    Args:
+        job_id: The UUID of the job.
+        data: The user-corrected inventory counts.
+    
+    Returns:
+        dict: Confirmation with updated inventory.
+    """
+    job = await database_service.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found",
+        )
+    
+    if job.status.value != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Can only update inventory for completed jobs",
+        )
+    
+    await database_service.update_user_inventory(job_id, data.user_inventory)
+    
+    return {
+        "status": "ok",
+        "job_id": str(job_id),
+        "user_inventory": data.user_inventory,
+    }
+
+
+@router.delete("/{job_id}/inventory")
+async def reset_user_inventory(job_id: UUID) -> dict:
+    """
+    Reset user-corrected inventory to AI-detected values.
+    
+    This clears the user_inventory field, reverting to the original
+    AI-detected counts.
+    
+    Args:
+        job_id: The UUID of the job.
+    
+    Returns:
+        dict: Confirmation of reset.
+    """
+    job = await database_service.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found",
+        )
+    
+    await database_service.update_user_inventory(job_id, None)
+    
+    return {
+        "status": "ok",
+        "job_id": str(job_id),
+        "message": "Inventory reset to AI-detected values",
+    }
