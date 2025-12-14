@@ -4,9 +4,10 @@ import { Video, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { VideoUpload } from '@/components/VideoUpload';
 import { ImageUpload } from '@/components/ImageUpload';
 import { PromptInput } from '@/components/PromptInput';
+import { PromptBuilder } from '@/components/PromptBuilder';
 import { JobStatus } from '@/components/JobStatus';
 import { VideoPlayer } from '@/components/VideoPlayer';
-import { ImageGallery } from '@/components/ImageGallery';
+import { InventoryReview } from '@/components/InventoryReview';
 import { DownloadButtons } from '@/components/DownloadButtons';
 import { JobHistory } from '@/components/JobHistory';
 import { InventoryList } from '@/components/InventoryList';
@@ -36,6 +37,7 @@ function AppContent() {
   const [imageIds, setImageIds] = useState<string[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<string>('');
 
   // Video hooks
   const uploadMutation = useUpload();
@@ -111,7 +113,9 @@ function AppContent() {
 
   const handleSelectJob = useCallback((selectedJob: Job) => {
     setJobId(selectedJob.id);
-    setInputMode('video'); // Assume video for job history
+    // Determine mode based on job_type field
+    const isImageJob = selectedJob.job_type === 'image_batch';
+    setInputMode(isImageJob ? 'images' : 'video');
     setAppState('results');
   }, []);
 
@@ -201,10 +205,41 @@ function AppContent() {
               <div className="rounded-lg border bg-card p-4">
                 <p className="text-sm text-muted-foreground">
                   {inputMode === 'video' 
-                    ? 'Video uploaded successfully. Now describe what you want to inventory.'
-                    : `${imageIds.length} images uploaded. Now describe what you want to inventory.`}
+                    ? 'Video uploaded successfully. Select a preset or customize your inventory prompt.'
+                    : `${imageIds.length} images uploaded. Select a preset or customize your inventory prompt.`}
                 </p>
               </div>
+              
+              {/* Prompt Builder for guided prompt selection */}
+              <PromptBuilder onPromptGenerated={setSelectedPrompt} />
+              
+              {/* Show submit section when prompt is selected */}
+              {selectedPrompt && (
+                <div className="space-y-3">
+                  <div className="rounded-lg border bg-blue-50 p-3">
+                    <p className="text-xs text-blue-600 font-medium mb-1">Ready to process with:</p>
+                    <p className="text-sm text-blue-800">{selectedPrompt}</p>
+                  </div>
+                  <Button 
+                    onClick={() => handlePromptSubmit(selectedPrompt)} 
+                    disabled={isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? 'Starting...' : 'Start Inventory Analysis'}
+                  </Button>
+                </div>
+              )}
+              
+              {/* Or use custom prompt */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or write your own</span>
+                </div>
+              </div>
+              
               <PromptInput
                 onSubmit={handlePromptSubmit}
                 isLoading={isLoading}
@@ -270,14 +305,28 @@ function AppContent() {
 
           {appState === 'results' && inputMode === 'images' && imageJob && (
             <>
-              {imageJob.composite_images && imageJob.composite_images.length > 0 && (
-                <ImageGallery 
-                  images={imageJob.composite_images}
-                  title="Processed Images with Detected Objects"
+              {/* Combined image + inventory review component */}
+              {imageJob.composite_images && imageJob.composite_images.length > 0 && imageJob.inventory && (
+                <InventoryReview
+                  jobId={imageJob.id}
+                  compositeImages={imageJob.composite_images}
+                  inventory={imageJob.inventory}
+                  inventoryColors={imageJob.inventory_colors}
+                  userInventory={imageJob.user_inventory}
+                  perImageResults={imageJob.per_image_results}
+                  itemsDetail={imageJob.per_image_results?.flatMap(r => 
+                    r.categories.map(name => ({
+                      name,
+                      count: imageJob.inventory?.[name.toLowerCase()] ?? 1,
+                      appears_in_images: [r.image_idx + 1]
+                    }))
+                  )}
                 />
               )}
               
-              {imageJob.inventory && Object.keys(imageJob.inventory).length > 0 && (
+              {/* Fallback if no composite images */}
+              {(!imageJob.composite_images || imageJob.composite_images.length === 0) && 
+               imageJob.inventory && Object.keys(imageJob.inventory).length > 0 && (
                 <InventoryList 
                   jobId={imageJob.id}
                   inventory={imageJob.inventory} 

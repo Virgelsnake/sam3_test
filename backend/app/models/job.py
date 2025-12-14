@@ -84,6 +84,13 @@ class JobResponse(BaseModel):
     inventory_colors: Optional[dict] = None  # Hex colors for each category
     user_inventory: Optional[dict] = None  # User-corrected inventory counts
     error_message: Optional[str] = None
+    
+    # Image batch specific fields
+    job_type: Optional[str] = None  # 'video' or 'image_batch'
+    image_count: Optional[int] = None
+    image_paths: Optional[list] = None
+    composite_images: Optional[list] = None  # URLs of composite images with masks
+    per_image_results: Optional[list] = None  # Per-image detection results
 
     # Timestamps
     created_at: datetime

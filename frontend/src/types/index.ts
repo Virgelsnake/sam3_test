@@ -17,6 +17,16 @@ export interface Job {
   created_at: string;
   started_at?: string;
   completed_at?: string;
+  // Image batch fields (also present on Job for unified history)
+  job_type?: 'video' | 'image_batch';
+  image_count?: number;
+  image_paths?: string[];
+  composite_images?: string[];
+  per_image_results?: Array<{
+    image_idx: number;
+    objects_found: number;
+    categories: string[];
+  }>;
 }
 
 export interface JobStatus {
@@ -45,6 +55,19 @@ export interface ApiError {
 
 // ==================== Image Batch Types ====================
 
+export interface ItemBbox {
+  category: string;
+  bbox: { x: number; y: number; width: number; height: number };
+  color: string;
+}
+
+export interface PerImageResult {
+  image_idx: number;
+  objects_found: number;
+  categories: string[];
+  item_bboxes?: ItemBbox[];
+}
+
 export interface ImageJob {
   id: string;
   status: JobState;
@@ -58,11 +81,7 @@ export interface ImageJob {
   inventory?: Record<string, number>;
   inventory_colors?: Record<string, string>;
   user_inventory?: Record<string, number>;
-  per_image_results?: Array<{
-    image_idx: number;
-    objects_found: number;
-    categories: string[];
-  }>;
+  per_image_results?: PerImageResult[];
   error_message?: string;
   created_at: string;
   started_at?: string;

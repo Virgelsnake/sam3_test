@@ -47,10 +47,12 @@ def create_app() -> FastAPI:
     error_handler_middleware(app)
 
     # Configure CORS (added last so it runs first)
+    # Note: allow_credentials=True is incompatible with allow_origins=["*"]
+    # For development, we allow all origins without credentials
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -9,10 +9,20 @@ interface InventoryListProps {
   onInventoryChange?: (updatedInventory: Record<string, number>) => void;
 }
 
-// Fallback colors if backend doesn't provide colors
-const FALLBACK_COLORS = [
-  '#00FF00', '#0000FF', '#FF0000', '#00FFFF', '#FF00FF',
-  '#FFFF00', '#FF0080', '#0080FF', '#FF8000', '#00FF80',
+// Must match CATEGORY_COLORS in worker/image_batch_service.py exactly
+const CATEGORY_COLORS = [
+  "#22c55e",  // Green
+  "#3b82f6",  // Blue
+  "#ef4444",  // Red
+  "#eab308",  // Yellow
+  "#a855f7",  // Purple
+  "#06b6d4",  // Cyan
+  "#f97316",  // Orange
+  "#ec4899",  // Pink
+  "#14b8a6",  // Teal
+  "#8b5cf6",  // Violet
+  "#84cc16",  // Lime
+  "#f43f5e",  // Rose
 ];
 
 function getCategoryColor(category: string, index: number, colorsFromBackend?: Record<string, string>): string {
@@ -28,8 +38,8 @@ function getCategoryColor(category: string, index: number, colorsFromBackend?: R
       return colorsFromBackend[withSpaces];
     }
   }
-  // Fallback to index-based colors
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  // Fallback to index-based colors (matches backend)
+  return CATEGORY_COLORS[index % CATEGORY_COLORS.length];
 }
 
 export function InventoryList({ jobId, inventory, inventoryColors, userInventory, onInventoryChange }: InventoryListProps) {

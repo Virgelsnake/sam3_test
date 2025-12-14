@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    # CORS - allow all localhost/127.0.0.1 origins for development
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:55392", "*"]
+    # CORS - allow all origins for development (use "*" alone for wildcard)
+    cors_origins: list[str] = ["*"]
 
     # Supabase
     supabase_url: str = ""

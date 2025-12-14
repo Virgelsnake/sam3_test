@@ -105,6 +105,12 @@ class DatabaseService:
             created_at=job_data["created_at"],
             started_at=job_data.get("started_at"),
             completed_at=job_data.get("completed_at"),
+            # Image batch specific fields
+            job_type=job_data.get("job_type"),
+            image_count=job_data.get("image_count"),
+            image_paths=job_data.get("image_paths"),
+            composite_images=job_data.get("composite_images"),
+            per_image_results=job_data.get("per_image_results"),
         )
 
     async def update_job_status(
@@ -215,6 +221,12 @@ class DatabaseService:
                     created_at=job_data["created_at"],
                     started_at=job_data.get("started_at"),
                     completed_at=job_data.get("completed_at"),
+                    # Image batch specific fields
+                    job_type=job_data.get("job_type"),
+                    image_count=job_data.get("image_count"),
+                    image_paths=job_data.get("image_paths"),
+                    composite_images=job_data.get("composite_images"),
+                    per_image_results=job_data.get("per_image_results"),
                 )
             )
 

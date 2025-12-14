@@ -192,9 +192,12 @@ class ImageBatchService:
             
             if items_in_image:
                 # Try SAM3 segmentation for visualization
-                composite = self._segment_and_overlay(image, items_in_image, category_colors)
+                composite, bboxes = self._segment_and_overlay(image, items_in_image, category_colors)
+                # Store bboxes in per_image_results
+                per_image_results[img_idx]["item_bboxes"] = bboxes
             else:
                 composite = image.copy()
+                per_image_results[img_idx]["item_bboxes"] = []
             
             composite_images.append(composite)
 
@@ -219,12 +222,18 @@ class ImageBatchService:
         image: np.ndarray,
         categories: list[str],
         category_colors: dict,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, list[dict]]:
         """
         Segment specific categories in an image and create colored overlay.
         
         This is for VISUALIZATION only - inventory is already determined by GPT-4V.
+        
+        Returns:
+            tuple: (composite_image, item_bboxes)
+                - composite_image: Image with mask overlays
+                - item_bboxes: List of {category, bbox: {x, y, width, height}, color}
         """
+        item_bboxes = []
         import tempfile
         import cv2
         
@@ -252,17 +261,61 @@ class ImageBatchService:
 
                     outputs = response.get("outputs", {})
                     binary_masks = outputs.get("out_binary_masks")
+                    
+                    # DIAGNOSTIC: Log what SAM3 returns for each category
+                    print(f"[ImageBatch] SAM3 response for '{category}':")
+                    print(f"  - outputs keys: {list(outputs.keys())}")
+                    print(f"  - binary_masks type: {type(binary_masks)}")
+                    if binary_masks is not None:
+                        print(f"  - binary_masks shape: {binary_masks.shape if hasattr(binary_masks, 'shape') else 'N/A'}")
 
                     if binary_masks is not None:
                         if hasattr(binary_masks, 'cpu'):
                             binary_masks = binary_masks.cpu().numpy()
+                        
+                        # DIAGNOSTIC: Log mask details
+                        print(f"  - numpy masks shape: {binary_masks.shape}")
+                        print(f"  - num masks: {len(binary_masks)}")
 
                         # Get color for this category
                         hex_color = category_colors.get(category.lower(), "#22c55e")
                         rgb_color = self._hex_to_rgb(hex_color)
 
-                        for mask in binary_masks:
+                        for mask_idx, mask in enumerate(binary_masks):
                             if mask.sum() > 100:
+                                # Extract bounding box from mask
+                                mask_2d = mask.squeeze() if mask.ndim > 2 else mask
+                                rows = np.any(mask_2d > 0.5, axis=1)
+                                cols = np.any(mask_2d > 0.5, axis=0)
+                                
+                                if rows.any() and cols.any():
+                                    y_min, y_max = np.where(rows)[0][[0, -1]]
+                                    x_min, x_max = np.where(cols)[0][[0, -1]]
+                                    
+                                    # Scale bbox to image dimensions if mask was resized
+                                    img_height, img_width = image.shape[:2]
+                                    mask_height, mask_width = mask_2d.shape[:2]
+                                    
+                                    # Calculate scaled bbox coordinates
+                                    scale_x = img_width / mask_width
+                                    scale_y = img_height / mask_height
+                                    
+                                    bbox = {
+                                        "x": int(x_min * scale_x),
+                                        "y": int(y_min * scale_y),
+                                        "width": int((x_max - x_min + 1) * scale_x),
+                                        "height": int((y_max - y_min + 1) * scale_y),
+                                    }
+                                    
+                                    # Store bbox for this category
+                                    item_bboxes.append({
+                                        "category": category,
+                                        "bbox": bbox,
+                                        "color": hex_color,
+                                    })
+                                    
+                                    print(f"  - mask[{mask_idx}] bbox: {bbox}")
+                                
                                 # Apply overlay
                                 if mask.ndim > 2:
                                     mask = mask.squeeze()
@@ -296,7 +349,7 @@ class ImageBatchService:
             if os.path.exists(temp_video_path):
                 os.remove(temp_video_path)
 
-        return composite.astype(np.uint8)
+        return composite.astype(np.uint8), item_bboxes
 
     def _process_single_image(
         self,
