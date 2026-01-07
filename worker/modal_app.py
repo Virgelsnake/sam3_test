@@ -78,7 +78,7 @@ supabase_secret = modal.Secret.from_name("supabase-secret")
 openai_secret = modal.Secret.from_name("openai-secret")
 
 @app.function(
-    gpu="A10G",  # 24GB VRAM - sufficient for most videos
+    gpu="A100-80GB",  # 80GB VRAM - high performance
     image=sam3_image,
     timeout=1800,  # 30 minute timeout
     secrets=[hf_secret, supabase_secret, openai_secret],
@@ -438,7 +438,7 @@ def benchmark_a100_80gb(video_url: str, prompt: str = "Generate an inventory of 
 
 
 @app.function(
-    gpu="A10G",
+    gpu="A100-80GB",
     image=sam3_image,
     timeout=1800,
     secrets=[hf_secret, supabase_secret, openai_secret],
@@ -623,7 +623,7 @@ def process_image_batch_job(
         cleanup_temp_files(*temp_files)
 
 
-@app.function(gpu="A10G", image=sam3_image, timeout=120, secrets=[hf_secret])
+@app.function(gpu="A100-80GB", image=sam3_image, timeout=120, secrets=[hf_secret])
 def health_check() -> dict:
     """
     Health check function to verify the worker is operational.

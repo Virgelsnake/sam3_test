@@ -468,10 +468,14 @@ def upload_to_supabase(
     with open(file_path, "rb") as f:
         content = f.read()
 
-    # Determine content type
+    # Determine content type based on file extension
     content_type = "video/mp4"
     if file_path.endswith(".webm"):
         content_type = "video/webm"
+    elif file_path.endswith(".jpg") or file_path.endswith(".jpeg"):
+        content_type = "image/jpeg"
+    elif file_path.endswith(".png"):
+        content_type = "image/png"
 
     client.storage.from_(bucket).upload(
         path=storage_path,
